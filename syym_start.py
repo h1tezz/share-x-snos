@@ -774,14 +774,13 @@ async def handle_my(callback: CallbackQuery):
     premium_status = "активен" if get_premium_status(user.id) else "не активен"
 
     await callback.message.edit_text(
-        f"👤 <b>Профиль</b>\n\n"
-        f"🔹 Имя: {user.full_name}\n"
-        f"🔹 ID: <code>{user.id}</code>\n"
-        f"🔹 Подписка: <b>{subscription_status}</b>\n"
-        f"🔹 Премиум: <b>{premium_status}</b>\n",
-        parse_mode="html",
-        reply_markup=back_keyboard
-    )
+    f"> Профиль\n\n"
+    f"🔹 Имя: {user.full_name}\n"
+    f"🔹 ID: {user.id}\n"
+    f"🔹 Подписка: {subscription_status}\n"
+    f"🔹 Премиум: {premium_status}\n",
+    reply_markup=back_keyboard
+)
     await callback.answer()
 
 # === Подписка ===
