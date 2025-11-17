@@ -976,7 +976,7 @@ async def handle_info(callback: CallbackQuery):
     
     await callback.answer()
 
-# === Знакдемона zN0s ===
+# === меню выбора типа сноса ===
 @dp.callback_query(F.data == "demon")
 async def handle_demon(callback: CallbackQuery):
     user_id = callback.from_user.id
@@ -999,12 +999,15 @@ async def handle_demon(callback: CallbackQuery):
     write_log(f"{user_id} нажал кнопку 'Начать'")
     
     # Показываем меню выбора
+    text = Bold("Выберите действие:").as_html()
+    text = BlockQuote(text).as_html()
+
     await callback.message.edit_text(
-        "<b>Выберите действие:</b>",
-        parse_mode="html",
-        reply_markup=snos_keyboard
-    )
+    text,
+    reply_markup=snos_keyboard
+)
     await callback.answer()
+
 
 # === Session ===
 @dp.callback_query(F.data == "session")
