@@ -7,7 +7,7 @@ import asyncio
 import os
 import time
 from collections import defaultdict
-from syym_cfg import start_keyboard, main_keyboard, back_keyboard, info_keyboard, subscription_keyboard_with_sub, subscription_keyboard_without_sub, TOKEN
+from syym_cfg import *
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -100,50 +100,95 @@ def clear_user_actions(user_id: int):
     if user_id in user_actions:
         del user_actions[user_id]
 
+# локальный кэш для отметок отправленных уведомлений
+ban_notify_cache = {}
+
 async def check_and_auto_ban(user_id: int, bot=None, action_type: str = "callback") -> bool:
     """Проверяет частоту действий и автоматически банит при превышении лимита.
-    action_type: "callback" для нажатий кнопок, "command" для команд
-    Возвращает True если пользователь был забанен, False если нет."""
+    Уведомление об авто-бане отправляется строго один раз."""
+
+    # ВНУТРЕННИЕ ФУНКЦИИ (по запросу всё в одной функции)
+    def was_ban_notified(uid: int) -> bool:
+        return ban_notify_cache.get(uid, False)
+
+    def mark_ban_notified(uid: int):
+        ban_notify_cache[uid] = True
+
+    # Авто-модерация выключена
     if not AUTO_MODERATION_ENABLED:
         return False
-    
-    # Пропускаем админов
+
+    # Админов не трогаем
     if is_admin(user_id):
         return False
-    
-    # Пропускаем уже забаненных
+
+    # Уже забанён → если автозабанен, просто игнорируем
     if is_banned(user_id):
+        reason = get_ban_reason(user_id)
+        if reason and reason.startswith("Автоматический бан"):
+            return True
         return False
-    
+
+    # Проверяем частоту действий
     exceeded, action_count = check_user_action_rate(user_id, action_type)
-    
+
     if exceeded:
-        # Формируем причину в зависимости от типа действия
+        # Формируем причину
         if action_type == "callback":
-            reason = f"Автоматический бан: Слишком много callback запросов ({action_count} нажатий кнопок за {AUTO_MODERATION_TIME_WINDOW} секунд)"
-        elif action_type == "command":
-            reason = f"Автоматический бан: Слишком частое использование команд ({action_count} команд за {AUTO_MODERATION_TIME_WINDOW} секунд)"
+            reason = (
+                f"Автоматический бан: Слишком много callback запросов "
+                f"({action_count} нажатий за {AUTO_MODERATION_TIME_WINDOW} сек.)"
+            )
         else:
-            reason = f"Автоматический бан: Слишком частые запросы ({action_count} действий за {AUTO_MODERATION_TIME_WINDOW} секунд)"
-        
+            reason = (
+                f"Автоматический бан: Слишком частые команды "
+                f"({action_count} за {AUTO_MODERATION_TIME_WINDOW} сек.)"
+            )
+
+        # Ставим бан
         success = update_ban_status(user_id, True, reason)
-        
+
         if success:
-            write_log(f"Авто-модерация: Пользователь {user_id} автоматически забанен за превышение лимита ({action_count} действий типа {action_type})")
-            
-            # Отправляем сообщение пользователю с кнопкой "Оспорить нарушение"
+            write_log(
+                f"Авто-бан: пользователь {user_id} забанен "
+                f"({action_count} действий, тип {action_type})"
+            )
+
+            # Уведомление — ТОЛЬКО ОДИН РАЗ
             try:
-                if bot:
-                    await bot.send_message(user_id, **BlockQuote(Bold("👮‍♂️ Auto-ban\n\n🚫 Вы превысили лимит запросов и были заблокированы навсегда")).as_kwargs(),reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⚡️ Оспорить нарушение", url="https://t.me/unsedb")]]))
+                if bot and not was_ban_notified(user_id):
+                    await bot.send_message(
+                        user_id,
+                        **BlockQuote(
+                            Bold(
+                                "👮‍♂️ Auto-ban\n\n🚫 Вы превысили лимит запросов и были заблокированы навсегда"
+                            )
+                        ).as_kwargs(),
+                        reply_markup=InlineKeyboardMarkup(
+                            inline_keyboard=[
+                                [
+                                    InlineKeyboardButton(
+                                        text="⚡️ Оспорить нарушение",
+                                        url="https://t.me/unsedb"
+                                    )
+                                ]
+                            ]
+                        )
+                    )
                     mark_ban_notified(user_id)
+
             except Exception as e:
-                write_log(f"Ошибка при отправке сообщения о бане пользователю {user_id}: {e}")
-            
-            # Очищаем историю действий
+                write_log(
+                    f"Ошибка при уведомлении пользователя {user_id}: {e}"
+                )
+
+            # Чистим историю
             clear_user_actions(user_id)
             return True
-    
+
     return False
+
+
 
 def load_admins():
     """Загружает список админов из файла"""
@@ -508,7 +553,6 @@ async def check_ban_and_notify(user_id: int, bot=None, message=None, callback=No
 
             mark_ban_notified(user_id)
             write_log(f"Отправлено сообщение о бане пользователю {user_id}, причина: {reason}")
-    
     return True
 
 def is_whitelisted(user_id: int) -> bool:

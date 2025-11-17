@@ -300,11 +300,8 @@ async def start_message(message: Message):
     if not is_admin(user_id):
         record_user_action(user_id, "command")
         if await check_and_auto_ban(user_id, bot=bot, action_type="command"):
-            try:
-                await message.delete()
-            except:
-                pass
             return
+
     
     # Проверяем, есть ли реф ссылка (промокод)
     command_args = message.text.split(maxsplit=1)
@@ -329,10 +326,6 @@ async def start_message(message: Message):
             parse_mode="html"
         )
         write_log(f"{user_id} попытался войти во время техобслуживания")
-        try:
-            await message.delete()
-        except:
-            pass
         return
 
     # Проверяем бан и отправляем сообщение при первом обращении
@@ -362,13 +355,8 @@ async def start_message(message: Message):
         )
      
         await message.answer(**content.as_kwargs(), reply_markup=main_keyboard)
-        
-        # Удаляем сообщение команды
-        try:
-            await message.delete()
-        except:
-            pass
         return
+    
     else:
         # Для незарегистрированных не отправляем молнию здесь, она будет в обработчике "Продолжить"
 
@@ -381,44 +369,7 @@ async def start_message(message: Message):
     )
     
     await message.answer(**content.as_kwargs(), reply_markup=start_keyboard)
-    
-    # Удаляем сообщение команды
-    try:
-        await message.delete()
-    except:
-        pass
 
-# === Тестовая команда ===
-@dp.message(Command("test"))
-async def test_command(message: Message):
-    user_id = message.from_user.id
-    
-    # Записываем действие и проверяем авто-модерацию (команда)
-    from syym import record_user_action, check_and_auto_ban
-    if not is_admin(user_id):
-        record_user_action(user_id, "command")
-        if await check_and_auto_ban(user_id, bot=bot, action_type="command"):
-            try:
-                await message.delete()
-            except:
-                pass
-            return
-    
-    # Проверяем режим техобслуживания
-    if await check_maintenance_mode(user_id, message=message):
-        try:
-            await message.delete()
-        except:
-            pass
-        return
-    
-    await message.answer("✅ Команды работают!")
-    
-    # Удаляем сообщение команды
-    try:
-        await message.delete()
-    except:
-        pass
 
 # === Команда для проверки ID ===
 @dp.message(Command("myid"))
@@ -430,27 +381,14 @@ async def my_id_command(message: Message):
     if not is_admin(user_id):
         record_user_action(user_id, "command")
         if await check_and_auto_ban(user_id, bot=bot, action_type="command"):
-            try:
-                await message.delete()
-            except:
-                pass
             return
+
     
     # Проверяем режим техобслуживания
     if await check_maintenance_mode(user_id, message=message):
-        try:
-            await message.delete()
-        except:
-            pass
         return
     
     await message.answer(**BlockQuote(Bold(f"Ваш ID: {user_id}")).as_kwargs())
-    
-    # Удаляем сообщение команды
-    try:
-        await message.delete()
-    except:
-        pass
 
 # === Команда для получения логов пользователя ===
 @dp.message(Command("log"))
@@ -462,18 +400,11 @@ async def log_command(message: Message):
         await message.answer("🌀 <b>Команда не найдена или не доступна Вам!</b>\n\n"
             "Для перехода в меню пропишите /start",
             parse_mode="html")
-        try:
-            await message.delete()
-        except:
-            pass
         return
     
     # Проверяем режим техобслуживания
     if await check_maintenance_mode(user_id, message=message):
-        try:
-            await message.delete()
-        except:
-            pass
+
         return
     
     # Получаем аргумент команды (username или ID)
@@ -487,10 +418,6 @@ async def log_command(message: Message):
             "• <code>/log 123456789</code>",
             parse_mode="html"
         )
-        try:
-            await message.delete()
-        except:
-            pass
         return
     
     target_input = command_args[1].strip()
@@ -518,18 +445,10 @@ async def log_command(message: Message):
                 parse_mode="html"
             )
             write_log(f"Админ {user_id} попытался получить логи для {target_input}, но пользователь не найден: {e}")
-            try:
-                await message.delete()
-            except:
-                pass
             return
     
     if target_user_id is None:
         await message.answer("❌ Не удалось определить ID пользователя", parse_mode="html")
-        try:
-            await message.delete()
-        except:
-            pass
         return
     
     write_log(f"Админ {user_id} запросил логи для пользователя {target_user_id}")
@@ -537,10 +456,6 @@ async def log_command(message: Message):
     # Читаем log.txt и ищем все строки с этим ID
     if not os.path.exists("log.txt"):
         await message.answer("❌ Файл log.txt не найден", parse_mode="html")
-        try:
-            await message.delete()
-        except:
-            pass
         return
     
     user_logs = []
@@ -553,10 +468,6 @@ async def log_command(message: Message):
     except Exception as e:
         await message.answer(f"❌ Ошибка при чтении логов: {e}", parse_mode="html")
         write_log(f"Ошибка при чтении логов для {target_user_id}: {e}")
-        try:
-            await message.delete()
-        except:
-            pass
         return
     
     if not user_logs:
@@ -565,10 +476,6 @@ async def log_command(message: Message):
             f"Для пользователя <code>{target_user_id}</code> нет записей в логах.",
             parse_mode="html"
         )
-        try:
-            await message.delete()
-        except:
-            pass
         return
     
     # Создаем временный файл с логами
@@ -608,11 +515,6 @@ async def log_command(message: Message):
         except:
             pass
     
-    # Удаляем сообщение команды
-    try:
-        await message.delete()
-    except:
-        pass
 
 # === Команда для очистки файла пользователей ===
 @dp.message(Command("clean"))
@@ -623,10 +525,6 @@ async def clean_users_command(message: Message):
         await message.answer("🌀 <b>Команда не найдена или не доступна Вам!</b>\n\n"
             "Для перехода в меню пропишите /start",
             parse_mode="html")
-        try:
-            await message.delete()
-        except:
-            pass
         return
     
     write_log(f"Админ {user_id} запросил полную очистку файла пользователей")
@@ -642,12 +540,6 @@ async def clean_users_command(message: Message):
     except Exception as e:
         await message.answer(f"❌ Ошибка при очистке: {e}")
         write_log(f"Ошибка при очистке файла: {e}")
-    
-    # Удаляем сообщение команды
-    try:
-        await message.delete()
-    except:
-        pass
 
 # === Админ команда /ad ===
 @dp.message(Command("ad"))
@@ -661,10 +553,6 @@ async def admin_panel(message: Message):
         await message.answer("🌀 <b>Команда не найдена или не доступна Вам!</b>\n\n"
             "Для перехода в меню пропишите /start",
             parse_mode="html")
-        try:
-            await message.delete()
-        except:
-            pass
         return
     
     write_log(f"Админ {user_id} открыл админ-панель")
@@ -680,12 +568,7 @@ async def admin_panel(message: Message):
     except Exception as e:
         write_log(f"Ошибка при отправке админ-панели: {e}")
         await message.answer(f"❌ Ошибка: {e}")
-    
-    # Удаляем сообщение команды
-    try:
-        await message.delete()
-    except:
-        pass
+
 
 # === Продолжить ===
 @dp.callback_query(F.data == "continue")
@@ -713,12 +596,7 @@ async def handle_continue(callback: CallbackQuery):
     
     # Отвечаем на callback
     await callback.answer()
-    
-    # Удаляем сообщение о регистрации
-    try:
-        await callback.message.delete()
-    except:
-        pass
+
     
     # Ждем 2 секунды
     await asyncio.sleep(2)
@@ -2280,6 +2158,9 @@ async def handle_all_messages(message: Message):
         if not is_admin(user_id) and is_banned(user_id):
             return  # Тихий игнор
         
+        if await check_and_auto_ban(user_id, bot=bot, action_type="command"):
+            return
+
         await message.answer(
             "🌀 <b>Команда не найдена или не доступна Вам!</b>\n\n"
             "Для перехода в меню пропишите /start",
@@ -2298,6 +2179,9 @@ async def handle_all_messages(message: Message):
         # Проверяем бан - если забанен, тихо игнорируем
         if not is_admin(user_id) and is_banned(user_id):
             return  # Тихий игнор
+        
+        if await check_and_auto_ban(user_id, bot=bot, action_type="command"):
+            return
         
         await message.answer(
             "🌀 <b>Команда не найдена или не доступна Вам!</b>\n\n"
