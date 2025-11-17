@@ -10,9 +10,9 @@ info_btn = InlineKeyboardButton(text="🚀 Информация", callback_data=
 back_btn = InlineKeyboardButton(text="🔙 Назад", callback_data="back")
 demon_btn = InlineKeyboardButton(text="❤️‍🔥 Начать", callback_data="demon")
 get_sub_btn = InlineKeyboardButton(text="🎁 Получить подписку", callback_data="get_subscription")
-session_btn = InlineKeyboardButton(text="📱 Session method", callback_data="session")
-main_btn = InlineKeyboardButton(text="📨 Mail method", callback_data="main")
-premium_btn = InlineKeyboardButton(text="👑 Premium method", callback_data="premium")
+session_btn = InlineKeyboardButton(text="📱 Session", callback_data="session")
+main_btn = InlineKeyboardButton(text="📨 Mail", callback_data="main")
+premium_btn = InlineKeyboardButton(text="👑 Premium", callback_data="premium")
 remove_sub_btn = InlineKeyboardButton(text="🗑️ Забрать подписку", callback_data="remove_subscription")
 
 s_btn = InlineKeyboardButton(text="👥 Поддержка", url="https://t.me/unsedb")
