@@ -21,7 +21,7 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 # === Админ ===
-ADMIN_ID = 8428752149
+from syym_cfg import ADMIN_ID
 
 # === Состояния для рассылки ===
 broadcast_waiting = False  # Флаг ожидания сообщения для рассылки
@@ -268,33 +268,60 @@ async def start_message(message: Message):
     else:
         greet = "Доброй ночи"
 
+    
+    # Определяем клавиатуру в зависимости от статуса пользователя
     if is_registered(user_id):
-        # Отправляем эмодзи молнии
-        await message.answer("⚡")
+        # Для зарегистрированных пользователей
         quote_text = f"{greet}, {message.from_user.full_name}!"
-    
-      # Формируем контент с цитатой и приветствием
         content = as_list(
-          Bold(f"{quote_text}"),
-           "",
-         BlockQuote(Bold("Выберите действие ниже:"))
+            Bold(f"{quote_text}"),
+            "",
+            BlockQuote(Bold("Выберите действие ниже:"))
         )
-     
-        await message.answer(**content.as_kwargs(), reply_markup=main_keyboard)
-        return
-    
+        
+        # Если админ, добавляем кнопку админ-панели
+        if is_admin(user_id):
+            admin_panel_btn = InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_panel_start")
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [demon_btn],
+                [sub_btn, my_btn],
+                [info_btn],
+                [admin_panel_btn]
+            ])
+        else:
+            keyboard = main_keyboard
+        
+        # Изменяем сообщение с фото
+        await bot.send_message(
+            chat_id=user_id,
+            **content.as_kwargs(),
+            reply_markup=keyboard
+        )
     else:
-        # Для незарегистрированных не отправляем молнию здесь, она будет в обработчике "Продолжить"
-
+        # Для незарегистрированных пользователей
         content = as_list(
-        Bold(f"{greet}, {message.from_user.full_name}!"),
-        "",
-        BlockQuote("Мы рады приветствовать вас в официальном Telegram-боте нашего сервиса, мы специализируемся в помощи с сессиями."),
-        "",
-        Bold("Чтобы начать пользоваться всеми преимуществами нашего сервиса, пожалуйста, нажмите на кнопку ниже:")
-    )
-    
-    await message.answer(**content.as_kwargs(), reply_markup=start_keyboard)
+            Bold(f"{greet}, {message.from_user.full_name}!"),
+            "",
+            BlockQuote("Мы рады приветствовать вас в официальном Telegram-боте нашего сервиса, мы специализируемся в помощи с сессиями."),
+            "",
+            Bold("Чтобы начать пользоваться всеми преимуществами нашего сервиса, пожалуйста, нажмите на кнопку ниже:")
+        )
+        
+        # Если админ, добавляем кнопку админ-панели
+        if is_admin(user_id):
+            admin_panel_btn = InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_panel_start")
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [continue_btn],
+                [admin_panel_btn]
+            ])
+        else:
+            keyboard = start_keyboard
+        
+        # Изменяем сообщение с фото
+        await bot.edit_message_caption(
+            **content.as_kwargs(),
+            reply_markup=keyboard
+        )
 
 
 # === Команда для проверки ID ===
@@ -467,6 +494,44 @@ async def clean_users_command(message: Message):
     except Exception as e:
         await message.answer(f"❌ Ошибка при очистке: {e}")
         write_log(f"Ошибка при очистке базы данных: {e}")
+
+@dp.callback_query(F.data == "admin_panel_start")
+async def admin_panel_1(message: Message):
+    user_id = message.from_user.id
+    
+    write_log(f"Получена команда /ad от пользователя {user_id}")
+    
+    if not is_admin(user_id):
+        write_log(f"Пользователь {user_id} попытался получить доступ к админ-панели")
+        await message.answer("🌀 <b>Команда не найдена или не доступна Вам!</b>\n\n"
+            "Для перехода в меню пропишите /start",
+            parse_mode="html")
+        return
+    
+    write_log(f"Админ {user_id} открыл админ-панель")
+    
+    try:
+        # Получаем статистику
+        stats = database.get_statistics()
+        
+        content = as_list(
+            BlockQuote(Bold("Админ-панель")),
+            "",
+            Bold("📊 Статистика:"),
+            f"👥 Пользователей: {stats['users']}",
+            f"🚫 Забанено: {stats['banned']}",
+            f"💎 С подпиской: {stats['subscribed']}",
+            f"👑 С премиумом: {stats['premium']}",
+            f"📝 В белом списке: {stats['whitelist']}",
+            f"🎟️ Промокодов: {stats['promocodes']}",
+            "",
+            Bold("Выберите категорию:")
+        )
+        await message.edit_text(**content.as_kwargs(), reply_markup=admin_keyboard)
+        write_log(f"Админ-панель успешно отправлена админу {user_id}")
+    except Exception as e:
+        write_log(f"Ошибка при отправке админ-панели: {e}")
+        await message.edit_text(f"❌ Ошибка: {e}")
 
 # === Админ команда /ad ===
 @dp.message(Command("ad"))
@@ -821,7 +886,7 @@ async def handle_demon(callback: CallbackQuery):
     
     # Показываем меню выбора
     content = as_list(
-        BlockQuote(Bold("Выберите вид")),
+        BlockQuote(Bold("Выберите действие ниже:")),
     )
 
     await callback.message.edit_text(
@@ -1630,7 +1695,7 @@ async def handle_all_messages(message: Message):
             action_type = "callback"  # Обычные сообщения считаем как callback
         record_user_action(user_id, action_type)
         
-    if await check_and_auto_ban(user_id, bot=bot, action_type=action_type):
+        if await check_and_auto_ban(user_id, bot=bot, action_type=action_type):
             return  # Тихий игнор
     
     # Проверяем режим техобслуживания для не-админов
@@ -1780,7 +1845,7 @@ async def handle_all_messages(message: Message):
         # Проверяем, есть ли ID жертвы в вайт листе
         if is_whitelisted(target_id):
             await message.answer(
-                f"❌ <b>Ошибка!</b>\n\nПользователь {target_id} уже находится в белом списке!",
+                f"❌ <b>Ошибка!</b>\n\nПользователь {target_id} находится в белом списке!",
                 parse_mode="html"
             )
             write_log(f"Пользователь {user_id} попытался использовать метод {method} для {target_id}, но он в вайт листе")

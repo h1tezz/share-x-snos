@@ -7,6 +7,12 @@ import json
 from datetime import datetime
 from typing import Optional, List, Dict, Tuple
 
+# Импортируем ADMIN_ID из конфига
+try:
+    from syym_cfg import ADMIN_ID
+except ImportError:
+    ADMIN_ID = 8428752149  # Значение по умолчанию, если конфиг не найден
+
 DB_PATH = "bot_database.sql"
 
 # === Инициализация базы данных ===
@@ -67,6 +73,15 @@ def init_database():
         CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value TEXT
+        )
+    """)
+    
+    # Таблица забаненных пользователей
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS banned_users (
+            user_id INTEGER PRIMARY KEY,
+            ban_reason TEXT,
+            ban_notified BOOLEAN DEFAULT 0
         )
     """)
     
@@ -187,13 +202,6 @@ def update_ban_status(user_id: int, status: bool, reason: Optional[str] = None) 
             
             # Сохраняем информацию о бане в таблице banned_users
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS banned_users (
-                    user_id INTEGER PRIMARY KEY,
-                    ban_reason TEXT,
-                    ban_notified BOOLEAN DEFAULT 0
-                )
-            """)
-            cursor.execute("""
                 INSERT OR REPLACE INTO banned_users (user_id, ban_reason, ban_notified) 
                 VALUES (?, ?, 0)
             """, (user_id, reason))
@@ -258,8 +266,7 @@ def unmark_ban_notified(user_id: int):
 # === Функции для работы с админами ===
 def load_admins() -> List[int]:
     """Загружает список админов из базы данных"""
-    ADMIN_ID = 8428752149  # Главный админ
-    admins = [ADMIN_ID]
+    admins = [ADMIN_ID]  # Главный админ из конфига
     
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -275,7 +282,6 @@ def load_admins() -> List[int]:
 
 def is_admin(user_id: int) -> bool:
     """Проверяет, является ли пользователь админом"""
-    ADMIN_ID = 8428752149  # Главный админ
     if user_id == ADMIN_ID:
         return True
     
@@ -289,7 +295,6 @@ def is_admin(user_id: int) -> bool:
 
 def add_admin(admin_id: int) -> bool:
     """Добавляет админа в базу данных. Возвращает True если добавлен, False если уже был"""
-    ADMIN_ID = 8428752149  # Главный админ
     if admin_id == ADMIN_ID:
         return False  # Главный админ уже есть
     
@@ -311,7 +316,6 @@ def add_admin(admin_id: int) -> bool:
 
 def remove_admin(admin_id: int) -> bool:
     """Удаляет админа из базы данных. Возвращает True если удален"""
-    ADMIN_ID = 8428752149  # Главный админ
     if admin_id == ADMIN_ID:
         return False  # Главного админа нельзя удалить
     
