@@ -104,12 +104,9 @@ snos_keyboard = InlineKeyboardMarkup(inline_keyboard=[
 
 # === Админ клавиатуры ===
 admin_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-    [bans_category_btn],
-    [subscription_category_btn],
-    [admins_category_btn],
-    [promocodes_btn],
-    [whitelist_btn],
-    [other_category_btn],
+    [bans_category_btn, subscription_category_btn],
+    [admins_category_btn, promocodes_btn],
+    [whitelist_btn, other_category_btn],
     [back_btn]
 ])
 
@@ -121,11 +118,9 @@ admin_bans_keyboard = InlineKeyboardMarkup(inline_keyboard=[
 ])
 
 admin_subscription_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-    [give_sub_btn],
-    [revoke_sub_btn],
+    [give_sub_btn, revoke_sub_btn],
     [check_sub_btn],
-    [give_premium_btn],
-    [revoke_premium_btn],
+    [give_premium_btn, revoke_premium_btn],
     [admin_menu_back_btn]
 ])
 
@@ -137,10 +132,8 @@ admin_admins_keyboard = InlineKeyboardMarkup(inline_keyboard=[
 
 admin_other_keyboard = InlineKeyboardMarkup(inline_keyboard=[
     [broadcast_btn],
-    [maintenance_btn],
-    [auto_moderation_btn],
-    [restart_btn],
-    [clean_btn],
+    [maintenance_btn, auto_moderation_btn],
+    [restart_btn, clean_btn],
     [help_btn],
     [admin_menu_back_btn]
 ])

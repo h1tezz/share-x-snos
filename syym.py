@@ -8,6 +8,7 @@ import os
 import time
 from collections import defaultdict
 from syym_cfg import *
+import database
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -19,6 +20,9 @@ def write_log(text: str):
     with open("log.txt", "a", encoding="utf-8") as f:
         f.write(f"[{time}] {text}\n")
 
+# Обновляем функцию логирования в database модуле
+database.write_log = write_log
+
 # === Система авто-модерации ===
 # Словарь для отслеживания действий пользователей: {user_id: {"callback": [timestamps], "command": [timestamps]}}
 user_actions = defaultdict(lambda: {"callback": [], "command": []})
@@ -26,18 +30,14 @@ user_actions = defaultdict(lambda: {"callback": [], "command": []})
 # Настройки авто-модерации
 AUTO_MODERATION_ENABLED = False
 AUTO_MODERATION_MAX_ACTIONS = 10  # Максимальное количество действий
-AUTO_MODERATION_TIME_WINDOW = 60  # Окно времени в секундах (60 секунд = 1 минута)
+AUTO_MODERATION_TIME_WINDOW = 30  # Окно времени в секундах (60 секунд = 1 минута)
 
 def load_auto_moderation_status():
-    """Загружает статус авто-модерации из файла"""
+    """Загружает статус авто-модерации из базы данных"""
     global AUTO_MODERATION_ENABLED
     try:
-        if os.path.exists("auto_moderation.txt"):
-            with open("auto_moderation.txt", "r", encoding="utf-8") as f:
-                content = f.read().strip().lower()
-                AUTO_MODERATION_ENABLED = content == "true"
-        else:
-            AUTO_MODERATION_ENABLED = False
+        status_str = database.get_setting("auto_moderation_enabled", "False")
+        AUTO_MODERATION_ENABLED = status_str.lower() == "true"
         return AUTO_MODERATION_ENABLED
     except Exception as e:
         write_log(f"Ошибка при загрузке статуса авто-модерации: {e}")
@@ -45,12 +45,11 @@ def load_auto_moderation_status():
         return False
 
 def save_auto_moderation_status(enabled: bool):
-    """Сохраняет статус авто-модерации в файл"""
+    """Сохраняет статус авто-модерации в базу данных"""
     global AUTO_MODERATION_ENABLED
     try:
         AUTO_MODERATION_ENABLED = enabled
-        with open("auto_moderation.txt", "w", encoding="utf-8") as f:
-            f.write(str(enabled))
+        database.set_setting("auto_moderation_enabled", str(enabled))
         return True
     except Exception as e:
         write_log(f"Ошибка при сохранении статуса авто-модерации: {e}")
@@ -188,345 +187,27 @@ async def check_and_auto_ban(user_id: int, bot=None, action_type: str = "callbac
 
 
 
-def load_admins():
-    """Загружает список админов из файла"""
-    admins = [ADMIN_ID]  # Главный админ всегда в списке
-    if os.path.exists("admins.txt"):
-        try:
-            with open("admins.txt", "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        try:
-                            admin_id = int(line)
-                            if admin_id not in admins:
-                                admins.append(admin_id)
-                        except ValueError:
-                            # Пропускаем некорректные строки
-                            continue
-        except Exception as e:
-            write_log(f"Ошибка при загрузке админов: {e}")
-    return admins
+# Импортируем функции из database модуля
+load_admins = database.load_admins
+is_admin = database.is_admin
+add_admin = database.add_admin
+remove_admin = database.remove_admin
 
-def is_admin(user_id: int) -> bool:
-    """Проверяет, является ли пользователь админом"""
-    admins = load_admins()
-    return user_id in admins
+# Импортируем функции работы с пользователями из database модуля
+add_user = database.add_user
+is_banned = database.is_banned
+get_subscription_status = database.get_subscription_status
+get_premium_status = database.get_premium_status
+is_registered = database.is_registered
+update_subscription_status = database.update_subscription_status
+update_premium_status = database.update_premium_status
 
-def add_admin(admin_id: int) -> bool:
-    """Добавляет админа в файл. Возвращает True если добавлен, False если уже был"""
-    if admin_id == ADMIN_ID:
-        return False  # Главный админ уже есть
-    
-    admins = load_admins()
-    if admin_id in admins:
-        return False  # Уже есть
-    
-    try:
-        with open("admins.txt", "a", encoding="utf-8") as f:
-            f.write(f"{admin_id}\n")
-        write_log(f"Добавлен новый админ {admin_id}")
-        return True
-    except Exception as e:
-        write_log(f"Ошибка при добавлении админа: {e}")
-        return False
-
-def remove_admin(admin_id: int) -> bool:
-    """Удаляет админа из файла. Возвращает True если удален"""
-    if admin_id == ADMIN_ID:
-        return False  # Главного админа нельзя удалить
-    
-    if not os.path.exists("admins.txt"):
-        return False
-    
-    try:
-        admins = []
-        with open("admins.txt", "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    try:
-                        line_id = int(line)
-                        if line_id != admin_id:
-                            admins.append(line)
-                    except ValueError:
-                        # Пропускаем некорректные строки
-                        continue
-        
-        with open("admins.txt", "w", encoding="utf-8") as f:
-            f.write("\n".join(admins))
-            if admins:
-                f.write("\n")
-        
-        write_log(f"Удален админ {admin_id}")
-        return True
-    except Exception as e:
-        write_log(f"Ошибка при удалении админа: {e}")
-        return False
-
-def clean_users_file():
-    """Очищает файл users.txt от некорректных строк"""
-    if not os.path.exists("users.txt"):
-        return
-    
-    clean_lines = []
-    with open("users.txt", "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if ":" in line:
-                parts = line.split(":")
-                if len(parts) == 3:
-                    try:
-                        # Проверяем, что первый элемент - это число
-                        int(parts[0])
-                        clean_lines.append(line + "\n")
-                    except ValueError:
-                        write_log(f"Удалена некорректная строка: {line}")
-                        continue
-    
-    with open("users.txt", "w", encoding="utf-8") as f:
-        f.writelines(clean_lines)
-    
-    write_log(f"Файл users.txt очищен, осталось {len(clean_lines)} корректных записей")
-
-# === Работа с users.txt ===
-def add_user(user_id: int) -> bool:
-    """Добавляет пользователя в users.txt, если его нет.
-    Возвращает True, если добавлен впервые, False — если уже был."""
-    if not os.path.exists("users.txt"):
-        open("users.txt", "w", encoding="utf-8").close()
-
-    with open("users.txt", "r", encoding="utf-8") as f:
-        lines = f.readlines()
-
-    for line in lines:
-        parts = line.strip().split(":")
-        if len(parts) >= 1 and parts[0] == str(user_id):
-            return False  # Уже есть
-
-    with open("users.txt", "a", encoding="utf-8") as f:
-        f.write(f"{user_id}:f:f:f\n")  # ID:подписка:бан:премиум
-    write_log(f"Добавлен новый пользователь {user_id}")
-    return True  # Новый пользователь
-
-def is_banned(user_id: int) -> bool:
-    """Проверяет, заблокирован ли пользователь"""
-    if not os.path.exists("users.txt"):
-        return False
-    with open("users.txt", "r", encoding="utf-8") as f:
-        for line in f:
-            parts = line.strip().split(":")
-            if len(parts) >= 1 and parts[0] == str(user_id):
-                # Старый формат: 3 части (ID:подписка:бан)
-                if len(parts) == 3:
-                    ban_value = parts[2].lower()
-                    return ban_value in ["true", "t"]
-                # Новый формат: 4 части (ID:подписка:бан:премиум)
-                elif len(parts) == 4:
-                    ban_value = parts[2].lower()
-                    return ban_value in ["true", "t"]
-    return False
-
-def get_subscription_status(user_id: int) -> bool:
-    """Возвращает статус подписки пользователя из users.txt"""
-    if not os.path.exists("users.txt"):
-        return False
-    with open("users.txt", "r", encoding="utf-8") as f:
-        for line in f:
-            parts = line.strip().split(":")
-            if len(parts) >= 1 and parts[0] == str(user_id):
-                # Старый формат: 3 части (ID:подписка:бан)
-                if len(parts) == 3:
-                    subscription_value = parts[1].lower()
-                    return subscription_value in ["true", "t"]
-                # Новый формат: 4 части (ID:подписка:бан:премиум)
-                elif len(parts) == 4:
-                    subscription_value = parts[1].lower()
-                    return subscription_value in ["true", "t"]
-    return False
-
-def get_premium_status(user_id: int) -> bool:
-    """Возвращает статус премиума пользователя из users.txt"""
-    if not os.path.exists("users.txt"):
-        return False
-    with open("users.txt", "r", encoding="utf-8") as f:
-        for line in f:
-            parts = line.strip().split(":")
-            if len(parts) == 4 and parts[0] == str(user_id):
-                premium_value = parts[3].lower()
-                return premium_value in ["true", "t"]
-    return False
-
-def is_registered(user_id: int) -> bool:
-    """Проверяет, зарегистрирован ли пользователь"""
-    if not os.path.exists("users.txt"):
-        return False
-    with open("users.txt", "r", encoding="utf-8") as f:
-        for line in f:
-            parts = line.strip().split(":")
-            if len(parts) >= 1 and parts[0] == str(user_id):
-                return True
-    return False
-
-def update_subscription_status(user_id: int, status: bool) -> bool:
-    """Обновляет статус подписки пользователя"""
-    if not os.path.exists("users.txt"):
-        return False
-    
-    lines = []
-    updated = False
-    
-    with open("users.txt", "r", encoding="utf-8") as f:
-        for line in f:
-            parts = line.strip().split(":")
-            if len(parts) >= 1 and parts[0] == str(user_id):
-                new_status = "t" if status else "f"
-                # Старый формат: 3 части (ID:подписка:бан)
-                if len(parts) == 3:
-                    lines.append(f"{parts[0]}:{new_status}:{parts[2]}\n")
-                # Новый формат: 4 части (ID:подписка:бан:премиум)
-                elif len(parts) == 4:
-                    lines.append(f"{parts[0]}:{new_status}:{parts[2]}:{parts[3]}\n")
-                updated = True
-                write_log(f"Обновлен статус подписки для {user_id}: {new_status}")
-            else:
-                lines.append(line)
-    
-    if updated:
-        with open("users.txt", "w", encoding="utf-8") as f:
-            f.writelines(lines)
-    
-    return updated
-
-def load_ban_reasons():
-    """Загружает причины банов из файла"""
-    if not os.path.exists("ban_reasons.json"):
-        return {}
-    try:
-        import json
-        with open("ban_reasons.json", "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        write_log(f"Ошибка при загрузке причин банов: {e}")
-        return {}
-
-def save_ban_reasons(ban_reasons):
-    """Сохраняет причины банов в файл"""
-    try:
-        import json
-        with open("ban_reasons.json", "w", encoding="utf-8") as f:
-            json.dump(ban_reasons, f, ensure_ascii=False, indent=2)
-        return True
-    except Exception as e:
-        write_log(f"Ошибка при сохранении причин банов: {e}")
-        return False
-
-def get_ban_reason(user_id: int) -> str:
-    """Получает причину бана пользователя"""
-    ban_reasons = load_ban_reasons()
-    return ban_reasons.get(str(user_id), "Не указана")
-
-def set_ban_reason(user_id: int, reason: str):
-    """Устанавливает причину бана пользователя"""
-    ban_reasons = load_ban_reasons()
-    ban_reasons[str(user_id)] = reason
-    save_ban_reasons(ban_reasons)
-
-def remove_ban_reason(user_id: int):
-    """Удаляет причину бана пользователя"""
-    ban_reasons = load_ban_reasons()
-    if str(user_id) in ban_reasons:
-        del ban_reasons[str(user_id)]
-        save_ban_reasons(ban_reasons)
-
-def load_ban_notified():
-    """Загружает список пользователей, которым уже отправлено сообщение о бане"""
-    if not os.path.exists("ban_notified.txt"):
-        return set()
-    try:
-        with open("ban_notified.txt", "r", encoding="utf-8") as f:
-            return set(line.strip() for line in f if line.strip())
-    except Exception as e:
-        write_log(f"Ошибка при загрузке списка уведомленных о бане: {e}")
-        return set()
-
-def save_ban_notified(notified_set):
-    """Сохраняет список пользователей, которым уже отправлено сообщение о бане"""
-    try:
-        with open("ban_notified.txt", "w", encoding="utf-8") as f:
-            for user_id in notified_set:
-                f.write(f"{user_id}\n")
-        return True
-    except Exception as e:
-        write_log(f"Ошибка при сохранении списка уведомленных о бане: {e}")
-        return False
-
-def is_ban_notified(user_id: int) -> bool:
-    """Проверяет, было ли уже отправлено сообщение о бане пользователю"""
-    notified = load_ban_notified()
-    return str(user_id) in notified
-
-def mark_ban_notified(user_id: int):
-    """Отмечает, что пользователю было отправлено сообщение о бане"""
-    notified = load_ban_notified()
-    notified.add(str(user_id))
-    save_ban_notified(notified)
-
-def unmark_ban_notified(user_id: int):
-    """Убирает отметку о том, что пользователю было отправлено сообщение о бане"""
-    notified = load_ban_notified()
-    notified.discard(str(user_id))
-    save_ban_notified(notified)
-
-def update_ban_status(user_id: int, status: bool, reason: str = None) -> bool:
-    """Обновляет статус бана пользователя. Если status=True, reason обязателен"""
-    if not os.path.exists("users.txt"):
-        return False
-    
-    lines = []
-    updated = False
-    
-    with open("users.txt", "r", encoding="utf-8") as f:
-        for line in f:
-            parts = line.strip().split(":")
-            if len(parts) >= 1 and parts[0] == str(user_id):
-                # Старый формат: 3 части (ID:подписка:бан)
-                if len(parts) == 3:
-                    subscription = parts[1]
-                    ban = "t" if status else "f"
-                    lines.append(f"{user_id}:{subscription}:{ban}\n")
-                # Новый формат: 4 части (ID:подписка:бан:премиум)
-                elif len(parts) == 4:
-                    subscription = parts[1]
-                    premium = parts[3]
-                    ban = "t" if status else "f"
-                    lines.append(f"{user_id}:{subscription}:{ban}:{premium}\n")
-                updated = True
-            else:
-                lines.append(line)
-    
-    if not updated:
-        # Если пользователя нет в файле, добавляем его
-        with open("users.txt", "a", encoding="utf-8") as f:
-            f.write(f"{user_id}:f:t:f\n")  # ID:подписка:бан:премиум
-        updated = True
-    
-    if updated:
-        with open("users.txt", "w", encoding="utf-8") as f:
-            f.writelines(lines)
-        
-        # Сохраняем или удаляем причину бана
-        if status:
-            if reason:
-                set_ban_reason(user_id, reason)
-                unmark_ban_notified(user_id)  # Сбрасываем флаг уведомления при новом бане
-            else:
-                write_log(f"Предупреждение: бан пользователя {user_id} без указания причины")
-        else:
-            remove_ban_reason(user_id)
-            unmark_ban_notified(user_id)
-    
-    return updated
+# Импортируем функции работы с банами из database модуля
+get_ban_reason = database.get_ban_reason
+is_ban_notified = database.is_ban_notified
+mark_ban_notified = database.mark_ban_notified
+unmark_ban_notified = database.unmark_ban_notified
+update_ban_status = database.update_ban_status
 
 async def check_ban_and_notify(user_id: int, bot=None, message=None, callback=None):
     """Проверяет бан пользователя и отправляет сообщение при первом обращении.
@@ -553,54 +234,10 @@ async def check_ban_and_notify(user_id: int, bot=None, message=None, callback=No
             write_log(f"Отправлено сообщение о бане пользователю {user_id}, причина: {reason}")
     return True
 
-def is_whitelisted(user_id: int) -> bool:
-    """Проверяет, находится ли пользователь в белом списке"""
-    if not os.path.exists("whitelist.txt"):
-        return False
-    with open("whitelist.txt", "r", encoding="utf-8") as f:
-        for line in f:
-            if line.strip() == str(user_id):
-                return True
-    return False
-
-def add_to_whitelist(user_id: int) -> bool:
-    """Добавляет пользователя в белый список"""
-    try:
-        # Проверяем, есть ли уже пользователь в белом списке
-        if is_whitelisted(user_id):
-            return False  # Уже в белом списке
-        
-        # Добавляем в белый список
-        with open("whitelist.txt", "a", encoding="utf-8") as f:
-            f.write(f"{user_id}\n")
-        
-        write_log(f"Пользователь {user_id} добавлен в белый список")
-        return True
-    except Exception as e:
-        write_log(f"Ошибка при добавлении в белый список: {e}")
-        return False
-
-def remove_from_whitelist(user_id: int) -> bool:
-    """Удаляет пользователя из белого списка"""
-    if not os.path.exists("whitelist.txt"):
-        return False
-    
-    lines = []
-    removed = False
-    
-    with open("whitelist.txt", "r", encoding="utf-8") as f:
-        for line in f:
-            if line.strip() != str(user_id):
-                lines.append(line)
-            else:
-                removed = True
-    
-    if removed:
-        with open("whitelist.txt", "w", encoding="utf-8") as f:
-            f.writelines(lines)
-        write_log(f"Пользователь {user_id} удален из белого списка")
-    
-    return removed
+# Импортируем функции работы с белым списком из database модуля
+is_whitelisted = database.is_whitelisted
+add_to_whitelist = database.add_to_whitelist
+remove_from_whitelist = database.remove_from_whitelist
 
 def update_premium_status(user_id: int, status: bool) -> bool:
     """Обновляет статус премиума пользователя"""
@@ -643,7 +280,7 @@ async def my_id_command(message: Message):
     user_id = message.from_user.id
     await message.answer(f"Ваш ID: {user_id}")
 
-# === Команда для очистки файла пользователей ===
+# === Команда для очистки базы данных пользователей ===
 @dp.message(Command("clean"))
 async def clean_users_command(message: Message):
     user_id = message.from_user.id
@@ -652,14 +289,17 @@ async def clean_users_command(message: Message):
         await message.answer("❌ Доступ запрещен")
         return
     
-    write_log(f"Админ {user_id} запросил очистку файла пользователей")
+    write_log(f"Админ {user_id} запросил очистку базы данных пользователей")
     
     try:
-        clean_users_file()
-        await message.answer("✅ Файл users.txt очищен от некорректных строк")
+        success, deleted_count = database.clean_users_database()
+        if success:
+            await message.answer(f"✅ База данных пользователей очищена\n\nУдалено пользователей: {deleted_count}")
+        else:
+            await message.answer("❌ Ошибка при очистке базы данных")
     except Exception as e:
         await message.answer(f"❌ Ошибка при очистке: {e}")
-        write_log(f"Ошибка при очистке файла: {e}")
+        write_log(f"Ошибка при очистке базы данных: {e}")
 
 # === Продолжить ===
 @dp.callback_query(F.data == "continue")

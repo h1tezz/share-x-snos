@@ -15,6 +15,7 @@ from aiogram.filters import Command
 from aiogram.utils.formatting import *
 from syym_cfg import *
 from syym import *
+import database
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -68,26 +69,14 @@ def generate_ref_link():
     ref = ''.join(random.choice(chars) for _ in range(16))
     return ref
 
-def load_promocodes():
-    """Загружает промокоды из файла"""
-    if not os.path.exists("promocodes.json"):
-        return {}
-    try:
-        with open("promocodes.json", "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        write_log(f"Ошибка при загрузке промокодов: {e}")
-        return {}
-
-def save_promocodes(promocodes):
-    """Сохраняет промокоды в файл"""
-    try:
-        with open("promocodes.json", "w", encoding="utf-8") as f:
-            json.dump(promocodes, f, ensure_ascii=False, indent=2)
-        return True
-    except Exception as e:
-        write_log(f"Ошибка при сохранении промокодов: {e}")
-        return False
+# Импортируем функции работы с промокодами из database модуля
+load_promocodes = database.load_promocodes
+save_promocodes = database.save_promocodes
+get_promocode_info = database.get_promocode_info
+delete_promocode = database.delete_promocode
+is_promocode_used = database.is_promocode_used
+mark_promocode_used = database.mark_promocode_used
+increment_promocode_uses = database.increment_promocode_uses
 
 async def create_promocode_async(promocode_name, reward, max_uses=-1):
     """Создает новый промокод. Возвращает (success, ref_link, message)"""
@@ -158,13 +147,8 @@ def activate_promocode(user_id, ref_link):
         return False, "Промокод исчерпан", None
     
     # Проверяем, не использовал ли уже этот пользователь этот промокод
-    used_promocodes_file = "used_promocodes.txt"
-    if os.path.exists(used_promocodes_file):
-        with open(used_promocodes_file, "r", encoding="utf-8") as f:
-            for line in f:
-                parts = line.strip().split(":")
-                if len(parts) == 2 and parts[0] == str(user_id) and parts[1] == promocode_name:
-                    return False, "❌ Вы уже использовали этот промокод", None
+    if is_promocode_used(user_id, promocode_name):
+        return False, "❌ Вы уже использовали этот промокод", None
     
     # Активируем награду
     reward = found_promocode["reward"]
@@ -185,13 +169,9 @@ def activate_promocode(user_id, ref_link):
             success = update_premium_status(user_id, True)
     
     if success:
-        # Увеличиваем счетчик использований
-        found_promocode["uses"] += 1
-        save_promocodes(promocodes)
-        
-        # Записываем использование
-        with open(used_promocodes_file, "a", encoding="utf-8") as f:
-            f.write(f"{user_id}:{promocode_name}\n")
+        # Увеличиваем счетчик использований и отмечаем как использованный
+        increment_promocode_uses(promocode_name)
+        mark_promocode_used(user_id, promocode_name)
         
         reward_text = {
             "whitelist": "Вайт лист",
@@ -204,73 +184,25 @@ def activate_promocode(user_id, ref_link):
     else:
         return False, "Ошибка при активации награды", None
 
-def delete_promocode(promocode_name):
-    """Удаляет промокод"""
-    promocodes = load_promocodes()
-    
-    if promocode_name.upper() not in promocodes:
-        return False, "Промокод не найден"
-    
-    del promocodes[promocode_name.upper()]
-    
-    if save_promocodes(promocodes):
-        return True, "Промокод удален"
-    else:
-        return False, "Ошибка при удалении промокода"
-
-def get_promocode_info(promocode_name):
-    """Получает информацию о промокоде"""
-    promocodes = load_promocodes()
-    
-    if promocode_name.upper() not in promocodes:
-        return None
-    
-    data = promocodes[promocode_name.upper()]
-    reward_text = {
-        "whitelist": "Вайт лист",
-        "subscription": "Подписка",
-        "premium": "Премиум",
-        "premium_sub": "Премиум + Подписка"
-    }.get(data["reward"], data["reward"])
-    
-    return {
-        "name": promocode_name.upper(),
-        "ref": data["ref"],
-        "reward": reward_text,
-        "active": data["active"],
-        "uses": data["uses"],
-        "max_uses": data["max_uses"]
-    }
+# Функции delete_promocode и get_promocode_info уже импортированы из database
 
 # === Состояние техобслуживания ===
 maintenance_mode = False  # Флаг режима техобслуживания
 
 # === Функции для работы с техобслуживанием ===
 def save_maintenance_status(status):
-    """Сохраняет статус техобслуживания в файл"""
-    try:
-        with open("maintenance.txt", "w", encoding="utf-8") as f:
-            f.write(str(status))
-        return True
-    except Exception as e:
-        write_log(f"Ошибка сохранения статуса техобслуживания: {e}")
-        return False
+    """Сохраняет статус техобслуживания в базу данных"""
+    global maintenance_mode
+    maintenance_mode = status
+    database.set_setting("maintenance_mode", str(status))
+    return True
 
 def load_maintenance_status():
-    """Загружает статус техобслуживания из файла"""
+    """Загружает статус техобслуживания из базы данных"""
     global maintenance_mode
-    try:
-        if os.path.exists("maintenance.txt"):
-            with open("maintenance.txt", "r", encoding="utf-8") as f:
-                content = f.read().strip()
-                maintenance_mode = content.lower() == "true"
-        else:
-            maintenance_mode = False
-        return maintenance_mode
-    except Exception as e:
-        write_log(f"Ошибка загрузки статуса техобслуживания: {e}")
-        maintenance_mode = False
-        return False
+    status_str = database.get_setting("maintenance_mode", "False")
+    maintenance_mode = status_str.lower() == "true"
+    return maintenance_mode
 
 async def check_maintenance_mode(user_id, callback=None, message=None):
     """Проверяет режим техобслуживания и отправляет сообщение если нужно"""
@@ -521,19 +453,20 @@ async def clean_users_command(message: Message):
             parse_mode="html")
         return
     
-    write_log(f"Админ {user_id} запросил полную очистку файла пользователей")
+    write_log(f"Админ {user_id} запросил полную очистку базы данных пользователей")
     
     try:
-        # Полностью очищаем файл users.txt
-        with open("users.txt", "w", encoding="utf-8") as f:
-            f.write("")
-        await message.answer(
-            **BlockQuote(Bold("✅ Файл users.txt полностью очищен - все пользователи удалены")).as_kwargs(),
-        )
-        write_log(f"Админ {user_id} полностью очистил файл пользователей")
+        success, deleted_count = database.clean_users_database()
+        if success:
+            await message.answer(
+                **BlockQuote(Bold(f"✅ База данных пользователей полностью очищена - удалено {deleted_count} пользователей")).as_kwargs(),
+            )
+            write_log(f"Админ {user_id} полностью очистил базу данных пользователей ({deleted_count} пользователей)")
+        else:
+            await message.answer("❌ Ошибка при очистке базы данных")
     except Exception as e:
         await message.answer(f"❌ Ошибка при очистке: {e}")
-        write_log(f"Ошибка при очистке файла: {e}")
+        write_log(f"Ошибка при очистке базы данных: {e}")
 
 # === Админ команда /ad ===
 @dp.message(Command("ad"))
@@ -552,8 +485,19 @@ async def admin_panel(message: Message):
     write_log(f"Админ {user_id} открыл админ-панель")
     
     try:
+        # Получаем статистику
+        stats = database.get_statistics()
+        
         content = as_list(
             BlockQuote(Bold("Админ-панель")),
+            "",
+            Bold("📊 Статистика:"),
+            f"👥 Пользователей: {stats['users']}",
+            f"🚫 Забанено: {stats['banned']}",
+            f"💎 С подпиской: {stats['subscribed']}",
+            f"👑 С премиумом: {stats['premium']}",
+            f"📝 В белом списке: {stats['whitelist']}",
+            f"🎟️ Промокодов: {stats['promocodes']}",
             "",
             Bold("Выберите категорию:")
         )
@@ -876,13 +820,14 @@ async def handle_demon(callback: CallbackQuery):
     write_log(f"{user_id} нажал кнопку 'Начать'")
     
     # Показываем меню выбора
-    text = Bold("Выберите действие:").as_html()
-    text = BlockQuote(text).as_html()
+    content = as_list(
+        BlockQuote(Bold("Выберите вид")),
+    )
 
     await callback.message.edit_text(
-    text,
-    reply_markup=snos_keyboard
-)
+        **content.as_kwargs(),
+        reply_markup=snos_keyboard
+    )
     await callback.answer()
 
 
@@ -1378,8 +1323,19 @@ async def handle_admin_back(callback: CallbackQuery):
     
     write_log(f"Админ {user_id} вернулся в админ-панель")
     
+    # Получаем статистику
+    stats = database.get_statistics()
+    
     content = as_list(
         BlockQuote(Bold("Админ-панель")),
+        "",
+        Bold("📊 Статистика:"),
+        f"👥 Пользователей: {stats['users']}",
+        f"🚫 Забанено: {stats['banned']}",
+        f"💎 С подпиской: {stats['subscribed']}",
+        f"👑 С премиумом: {stats['premium']}",
+        f"📝 В белом списке: {stats['whitelist']}",
+        f"🎟️ Промокодов: {stats['promocodes']}",
         "",
         Bold("Выберите категорию:")
     )
@@ -2075,79 +2031,59 @@ async def handle_all_messages(message: Message):
             # Сбрасываем состояние ожидания рассылки
             broadcast_waiting = False
             
-            # Получаем всех пользователей
-            if not os.path.exists("users.txt"):
-                await message.answer("❌ Файл пользователей не найден")
-                return
+            # Получаем всех пользователей из базы данных (забаненные уже исключены)
+            user_ids = database.get_all_users_for_broadcast()
             
-            with open("users.txt", "r", encoding="utf-8") as f:
-                lines = f.readlines()
-            
-            if not lines:
+            if not user_ids:
                 await message.answer("❌ Нет пользователей для рассылки")
                 return
             
             sent_count = 0
             error_count = 0
-            banned_count = 0
             
             await message.answer("📢 Начинаю рассылку...")
             
-            for line in lines:
-                if ":" in line:
+            for user_id_from_file in user_ids:
+                # Получаем информацию о пользователе для подстановки переменных
+                try:
+                    user_chat = await bot.get_chat(user_id_from_file)
+                    user_name = user_chat.first_name or ""
+                    if user_chat.last_name:
+                        user_name += " " + user_chat.last_name
+                    user_username = user_chat.username or ""
+                    if user_username:
+                        user_username = "@" + user_username
+                except:
+                    user_name = "Пользователь"
+                    user_username = ""
+                
+                # Подставляем переменные {user} и {user_us}
+                message_text = text.replace("{user}", user_name)
+                message_text = message_text.replace("{user_us}", user_username)
+                
+                try:
+                    # Сначала пробуем MarkdownV2
+                    await bot.send_message(user_id_from_file, message_text, parse_mode="MarkdownV2")
+                    sent_count += 1
+                except Exception as e:
                     try:
-                        user_id_from_file = int(line.split(":")[0])
-                    except ValueError:
-                        # Пропускаем строки, которые не содержат числовой ID
-                        write_log(f"Пропущена некорректная строка в users.txt: {line.strip()}")
-                        continue
-                    
-                    # Пропускаем забаненных пользователей
-                    if is_banned(user_id_from_file):
-                        banned_count += 1
-                        continue
-                    
-                    # Получаем информацию о пользователе для подстановки переменных
-                    try:
-                        user_chat = await bot.get_chat(user_id_from_file)
-                        user_name = user_chat.first_name or ""
-                        if user_chat.last_name:
-                            user_name += " " + user_chat.last_name
-                        user_username = user_chat.username or ""
-                        if user_username:
-                            user_username = "@" + user_username
-                    except:
-                        user_name = "Пользователь"
-                        user_username = ""
-                    
-                    # Подставляем переменные {user} и {user_us}
-                    message_text = text.replace("{user}", user_name)
-                    message_text = message_text.replace("{user_us}", user_username)
-                    
-                    try:
-                        # Сначала пробуем MarkdownV2
-                        await bot.send_message(user_id_from_file, message_text, parse_mode="MarkdownV2")
+                        # Если MarkdownV2 не работает, отправляем как обычный текст
+                        await bot.send_message(user_id_from_file, message_text)
                         sent_count += 1
-                    except Exception as e:
-                        try:
-                            # Если MarkdownV2 не работает, отправляем как обычный текст
-                            await bot.send_message(user_id_from_file, message_text)
-                            sent_count += 1
-                            write_log(f"MarkdownV2 не сработал для {user_id_from_file}, отправлено как текст")
-                        except Exception as e2:
-                            error_count += 1
-                            write_log(f"Ошибка отправки сообщения пользователю {user_id_from_file}: {e2}")
+                        write_log(f"MarkdownV2 не сработал для {user_id_from_file}, отправлено как текст")
+                    except Exception as e2:
+                        error_count += 1
+                        write_log(f"Ошибка отправки сообщения пользователю {user_id_from_file}: {e2}")
             
             await message.answer(
                 f"📢 <b>Рассылка завершена</b>\n\n"
                 f"✅ Отправлено: {sent_count}\n"
-                f"❌ Ошибок: {error_count}\n"
-                f"🚫 Забаненных пропущено: {banned_count}\n\n"
+                f"❌ Ошибок: {error_count}\n\n"
                 f"💡 <i>Для новой рассылки нажмите кнопку \"📢 Рассылка\" в админ-панели</i>",
                 parse_mode="html"
             )
             
-            write_log(f"Админ {user_id} провел рассылку: отправлено {sent_count}, ошибок {error_count}, забаненных {banned_count}")
+            write_log(f"Админ {user_id} провел рассылку: отправлено {sent_count}, ошибок {error_count}")
             return
     
     # Обработка неизвестных команд для всех пользователей
