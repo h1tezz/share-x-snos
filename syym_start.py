@@ -277,7 +277,6 @@ async def check_maintenance_mode(user_id, callback=None, message=None):
     if maintenance_mode and not is_admin(user_id):
         maintenance_text = (
             "🔧 Бот сейчас находится на тех. обслуживании\n\n"
-            "Подробнее: @exwovv"
         )
         
         if callback:
@@ -296,7 +295,6 @@ async def start_message(message: Message):
     write_log(f"{user_id} вызвал /start")
     
     # Записываем действие и проверяем авто-модерацию (команда)
-    from syym import record_user_action, check_and_auto_ban
     if not is_admin(user_id):
         record_user_action(user_id, "command")
         if await check_and_auto_ban(user_id, bot=bot, action_type="command"):
@@ -320,11 +318,7 @@ async def start_message(message: Message):
 
     # Проверяем режим техобслуживания
     if maintenance_mode and not is_admin(user_id):
-        await message.answer(
-            "🔧 <b>Бот сейчас находится на тех. обслуживании</b>\n\n"
-            "Подробнее: @exwovv",
-            parse_mode="html"
-        )
+        await message.answer(**BlockQuote(Bold(f"🔧 Бот сейчас находится на тех. обслуживании")).as_kwargs())
         write_log(f"{user_id} попытался войти во время техобслуживания")
         return
 
@@ -363,7 +357,7 @@ async def start_message(message: Message):
         content = as_list(
         Bold(f"{greet}, {message.from_user.full_name}!"),
         "",
-        BlockQuote("Мы рады приветствовать вас в официальном Telegram-боте нашего сервиса"),
+        BlockQuote("Мы рады приветствовать вас в официальном Telegram-боте нашего сервиса, мы специализируемся в помощи с сессиями."),
         "",
         Bold("Чтобы начать пользоваться всеми преимуществами нашего сервиса, пожалуйста, нажмите на кнопку ниже:")
     )
@@ -596,6 +590,11 @@ async def handle_continue(callback: CallbackQuery):
     
     # Отвечаем на callback
     await callback.answer()
+       
+    try:
+        await callback.message.delete()
+    except:
+        pass  # если удалить нельзя — игнор
 
     
     # Ждем 2 секунды
@@ -1674,15 +1673,14 @@ async def handle_all_messages(message: Message):
         else:
             action_type = "callback"  # Обычные сообщения считаем как callback
         record_user_action(user_id, action_type)
-        if await check_and_auto_ban(user_id, bot=bot, action_type=action_type):
+        
+    if await check_and_auto_ban(user_id, bot=bot, action_type=action_type):
             return  # Тихий игнор
     
     # Проверяем режим техобслуживания для не-админов
     if maintenance_mode and not is_admin(user_id):
         await message.answer(
-            "🔧 <b>Бот сейчас находится на тех. обслуживании</b>\n\n"
-            "Подробнее в канале: @exwovv",
-            parse_mode="html"
+            **BlockQuote(Bold(f"🔧 Бот сейчас находится на тех. обслуживании")).as_kwargs()
         )
         write_log(f"{user_id} попытался отправить сообщение во время техобслуживания")
         return

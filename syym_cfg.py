@@ -2,6 +2,9 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from aiogram.filters import Command
 
+ADMIN_ID = 7832587042
+TOKEN = '8256862820:AAHkQn_8fAP-XV01-x9xneC5XZSZhubOi6c'
+
 # === Кнопки ===
 continue_btn = InlineKeyboardButton(text="✈️ Продолжить", callback_data="continue")
 sub_btn = InlineKeyboardButton(text="💎 Подписка", callback_data="subscription")
@@ -146,4 +149,3 @@ sub_keyboard = InlineKeyboardMarkup(inline_keyboard=[
     [buy_btn],
     [back_btn]
 ])
-TOKEN = '8256862820:AAHkQn_8fAP-XV01-x9xneC5XZSZhubOi6c'

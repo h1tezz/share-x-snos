@@ -12,8 +12,6 @@ from syym_cfg import *
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# === Админ ===
-ADMIN_ID = 7832587042
 
 # === Кастомное логирование ===
 def write_log(text: str):
