@@ -9,11 +9,11 @@ from typing import Optional, List, Dict, Tuple
 
 # Импортируем ADMIN_ID из конфига
 try:
-    from syym_cfg import ADMIN_ID
+    from config import ADMIN_ID
 except ImportError:
     ADMIN_ID = 8428752149  # Значение по умолчанию, если конфиг не найден
 
-DB_PATH = "bot_database.sql"
+DB_PATH = "sql.sql"
 
 # === Инициализация базы данных ===
 def init_database():

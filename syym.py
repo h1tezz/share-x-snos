@@ -7,7 +7,7 @@ import asyncio
 import os
 import time
 from collections import defaultdict
-from syym_cfg import *
+from config import *
 import database
 
 bot = Bot(token=TOKEN)

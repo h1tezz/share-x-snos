@@ -13,7 +13,7 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from aiogram.filters import Command
 from aiogram.utils.formatting import *
-from syym_cfg import *
+from config import *
 from syym import *
 import database
 
@@ -21,7 +21,7 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 # === Админ ===
-from syym_cfg import ADMIN_ID
+ADMIN_ID = ADMIN_ID
 
 # === Состояния для рассылки ===
 broadcast_waiting = False  # Флаг ожидания сообщения для рассылки
@@ -220,44 +220,42 @@ async def check_maintenance_mode(user_id, callback=None, message=None):
         return True
     return False
 
-# === /start ===
 @dp.message(Command("start"))
 async def start_message(message: Message):
     user_id = message.from_user.id
     write_log(f"{user_id} вызвал /start")
-    
-    # Записываем действие и проверяем авто-модерацию (команда)
+
+    # Автомодерация
     if not is_admin(user_id):
         record_user_action(user_id, "command")
         if await check_and_auto_ban(user_id, bot=bot, action_type="command"):
             return
 
-    
-    # Проверяем, есть ли реф ссылка (промокод)
+    # Проверяем реф
     command_args = message.text.split(maxsplit=1)
     if len(command_args) > 1 and command_args[1].startswith("ref_"):
-        ref_link = command_args[1][4:]  # Убираем "ref_"
-        
-        # Активируем промокод
+        ref_link = command_args[1][4:]
         success, msg, reward = activate_promocode(user_id, ref_link)
-        
-        if success:
-            await message.answer(f"🎉 {msg}", parse_mode="html")
-            write_log(f"Пользователь {user_id} активировал промокод через реф ссылку {ref_link}")
-        else:
-            await message.answer(f"❌ {msg}", parse_mode="html")
-            write_log(f"Пользователь {user_id} попытался активировать промокод {ref_link}, но: {msg}")
 
-    # Проверяем режим техобслуживания
+        await message.answer(
+            f"🎉 {msg}" if success else f"❌ {msg}",
+            parse_mode="html"
+        )
+        write_log(f"Промокод от {user_id}: {ref_link} → {msg}")
+
+    # Техработы
     if maintenance_mode and not is_admin(user_id):
-        await message.answer(**BlockQuote(Bold(f"🔧 Бот сейчас находится на тех. обслуживании")).as_kwargs())
-        write_log(f"{user_id} попытался войти во время техобслуживания")
+        await message.answer(
+            **BlockQuote(Bold("🔧 Бот сейчас находится на тех. обслуживании")).as_kwargs()
+        )
+        write_log(f"{user_id} попытался войти во время техработ")
         return
 
-    # Проверяем бан и отправляем сообщение при первом обращении
+    # Проверяем бан
     if await check_ban_and_notify(user_id, bot=bot, message=message):
-        return  # Тихий игнор
+        return
 
+    # Приветствие
     hour = datetime.now().hour
     if 5 <= hour < 12:
         greet = "Доброе утро"
@@ -268,37 +266,37 @@ async def start_message(message: Message):
     else:
         greet = "Доброй ночи"
 
-    
-    # Определяем клавиатуру в зависимости от статуса пользователя
+    # === Зарегистрированные ===
     if is_registered(user_id):
-        # Для зарегистрированных пользователей
         quote_text = f"{greet}, {message.from_user.full_name}!"
+
         content = as_list(
-            Bold(f"{quote_text}"),
+            Bold(quote_text),
             "",
             BlockQuote(Bold("Выберите действие ниже:"))
         )
-        
-        # Если админ, добавляем кнопку админ-панели
+
+        # Клавиатура
         if is_admin(user_id):
-            admin_panel_btn = InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_panel_start")
+            admin_btn = InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_panel_start")
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [demon_btn],
                 [sub_btn, my_btn],
                 [info_btn],
-                [admin_panel_btn]
+                [admin_btn]
             ])
         else:
             keyboard = main_keyboard
-        
-        # Изменяем сообщение с фото
+
+        # ВСЕГДА send_message
         await bot.send_message(
             chat_id=user_id,
             **content.as_kwargs(),
             reply_markup=keyboard
         )
+
+    # === НОВЫЕ пользователи ===
     else:
-        # Для незарегистрированных пользователей
         content = as_list(
             Bold(f"{greet}, {message.from_user.full_name}!"),
             "",
@@ -306,22 +304,16 @@ async def start_message(message: Message):
             "",
             Bold("Чтобы начать пользоваться всеми преимуществами нашего сервиса, пожалуйста, нажмите на кнопку ниже:")
         )
-        
-        # Если админ, добавляем кнопку админ-панели
-        if is_admin(user_id):
-            admin_panel_btn = InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_panel_start")
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [continue_btn],
-                [admin_panel_btn]
-            ])
-        else:
-            keyboard = start_keyboard
-        
-        # Изменяем сообщение с фото
-        await bot.edit_message_caption(
+
+        keyboard = start_keyboard
+
+        # Тут ТОЖЕ send_message (а не edit!)
+        await bot.send_message(
+            chat_id=user_id,
             **content.as_kwargs(),
             reply_markup=keyboard
         )
+
 
 
 # === Команда для проверки ID ===
@@ -495,25 +487,31 @@ async def clean_users_command(message: Message):
         await message.answer(f"❌ Ошибка при очистке: {e}")
         write_log(f"Ошибка при очистке базы данных: {e}")
 
+
+# === Кнопка Админ-панель в главном меню ===
+
 @dp.callback_query(F.data == "admin_panel_start")
-async def admin_panel_1(message: Message):
-    user_id = message.from_user.id
-    
-    write_log(f"Получена команда /ad от пользователя {user_id}")
-    
+async def admin_panel_1(callback: CallbackQuery):
+    user_id = callback.from_user.id
+
+    write_log(f"Получена команда admin_panel_start от {user_id}")
+
+    # Проверка прав
     if not is_admin(user_id):
-        write_log(f"Пользователь {user_id} попытался получить доступ к админ-панели")
-        await message.answer("🌀 <b>Команда не найдена или не доступна Вам!</b>\n\n"
+        write_log(f"Пользователь {user_id} попытался войти в админ-панель")
+        await callback.message.answer(
+            "🌀 <b>Команда не найдена или не доступна Вам!</b>\n\n"
             "Для перехода в меню пропишите /start",
-            parse_mode="html")
+            parse_mode="html"
+        )
         return
-    
+
     write_log(f"Админ {user_id} открыл админ-панель")
-    
+
     try:
         # Получаем статистику
         stats = database.get_statistics()
-        
+
         content = as_list(
             BlockQuote(Bold("Админ-панель")),
             "",
@@ -527,11 +525,19 @@ async def admin_panel_1(message: Message):
             "",
             Bold("Выберите категорию:")
         )
-        await message.edit_text(**content.as_kwargs(), reply_markup=admin_keyboard)
-        write_log(f"Админ-панель успешно отправлена админу {user_id}")
+
+        # Редактируем сообщение, из которого пришёл callback
+        await callback.message.edit_text(
+            **content.as_kwargs(),
+            reply_markup=admin_keyboard
+        )
+
+        write_log(f"Админ-панель отправлена пользователю {user_id}")
+
     except Exception as e:
         write_log(f"Ошибка при отправке админ-панели: {e}")
-        await message.edit_text(f"❌ Ошибка: {e}")
+        await callback.message.edit_text(f"❌ Ошибка: {e}")
+
 
 # === Админ команда /ad ===
 @dp.message(Command("ad"))
@@ -578,8 +584,6 @@ async def admin_panel(message: Message):
 async def handle_continue(callback: CallbackQuery):
     user_id = callback.from_user.id
 
-    # Записываем действие и проверяем авто-модерацию (callback)
-    from syym import record_user_action, check_and_auto_ban
     if not is_admin(user_id):
         record_user_action(user_id, "callback")
         if await check_and_auto_ban(user_id, bot=bot, action_type="callback"):
@@ -2156,9 +2160,6 @@ async def handle_all_messages(message: Message):
         # Проверяем бан - если забанен, тихо игнорируем
         if not is_admin(user_id) and is_banned(user_id):
             return  # Тихий игнор
-        
-        if await check_and_auto_ban(user_id, bot=bot, action_type="command"):
-            return
 
         await message.answer(
             "🌀 <b>Команда не найдена или не доступна Вам!</b>\n\n"
@@ -2179,8 +2180,6 @@ async def handle_all_messages(message: Message):
         if not is_admin(user_id) and is_banned(user_id):
             return  # Тихий игнор
         
-        if await check_and_auto_ban(user_id, bot=bot, action_type="command"):
-            return
         
         await message.answer(
             "🌀 <b>Команда не найдена или не доступна Вам!</b>\n\n"
