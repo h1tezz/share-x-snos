@@ -5,12 +5,13 @@ import json
 import random
 import string
 from datetime import datetime
+import os
 
 # Добавляем текущую директорию в путь для импорта
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
+from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, FSInputFile
 from aiogram.filters import Command
 from aiogram.utils.formatting import *
 from config import *
@@ -255,64 +256,40 @@ async def start_message(message: Message):
     if await check_ban_and_notify(user_id, bot=bot, message=message):
         return
 
-    # Приветствие
-    hour = datetime.now().hour
-    if 5 <= hour < 12:
-        greet = "Доброе утро"
-    elif 12 <= hour < 18:
-        greet = "Добрый день"
-    elif 18 <= hour < 23:
-        greet = "Добрый вечер"
-    else:
-        greet = "Доброй ночи"
 
     # === Зарегистрированные ===
     if is_registered(user_id):
-        quote_text = f"{greet}, {message.from_user.full_name}!"
+        quote_text = f"Доброго времени суток, {message.from_user.full_name}!"
 
         content = as_list(
             Bold(quote_text),
             "",
-            BlockQuote(Bold("Выберите действие ниже:"))
+            BlockQuote(Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ"))
         )
 
-        # Клавиатура
-        if is_admin(user_id):
-            admin_btn = InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_panel_start")
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [demon_btn],
-                [sub_btn, my_btn],
-                [info_btn],
-                [admin_btn]
-            ])
-        else:
-            keyboard = main_keyboard
-
-        # ВСЕГДА send_message
         await bot.send_message(
             chat_id=user_id,
             **content.as_kwargs(),
-            reply_markup=keyboard
-        )
+            reply_markup=main_keyboard
+            )
+
 
     # === НОВЫЕ пользователи ===
     else:
         content = as_list(
-            Bold(f"{greet}, {message.from_user.full_name}!"),
+            Bold(f"Доброго времени суток, {message.from_user.full_name}!ㅤㅤㅤㅤㅤㅤㅤㅤ"),
             "",
             BlockQuote("Мы рады приветствовать вас в официальном Telegram-боте нашего сервиса, мы специализируемся в помощи с сессиями."),
             "",
             Bold("Чтобы начать пользоваться всеми преимуществами нашего сервиса, пожалуйста, нажмите на кнопку ниже:")
         )
 
-        keyboard = start_keyboard
-
-        # Тут ТОЖЕ send_message (а не edit!)
         await bot.send_message(
             chat_id=user_id,
             **content.as_kwargs(),
-            reply_markup=keyboard
+            reply_markup=start_keyboard
         )
+
 
 
 
@@ -614,24 +591,14 @@ async def handle_continue(callback: CallbackQuery):
     await asyncio.sleep(2)
     
     # Определяем приветствие в зависимости от времени
-    hour = datetime.now().hour
-    if 5 <= hour < 12:
-        greet = "Доброе утро"
-    elif 12 <= hour < 18:
-        greet = "Добрый день"
-    elif 18 <= hour < 23:
-        greet = "Добрый вечер"
-    else:
-        greet = "Доброй ночи"
-    
     # Отправляем эмодзи молнии
     await bot.send_message(user_id, "⚡")
         
     # Формируем контент с цитатой и приветствием
     content = as_list(
-        BlockQuote(Bold(f"{greet}, {callback.from_user.full_name}!")),
+        BlockQuote(Bold(f"Доброго времени суток, {callback.from_user.full_name}!")),
         "",
-        Bold("Выберите действие ниже:")
+        Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ")
     )
     
     await bot.send_message(user_id, **content.as_kwargs(), reply_markup=main_keyboard)
@@ -697,17 +664,10 @@ async def handle_subscription(callback: CallbackQuery):
     if await check_ban_and_notify(user_id, bot=bot, callback=callback):
         return  # Тихий игнор
 
-    write_log(f"{user_id} открыл раздел подписки")
-
-    # Проверяем текущий статус подписки
-    has_subscription = get_subscription_status(user_id)
-    subscription_text = "✅ Активна" if has_subscription else "❌ Неактивна"
-    
-    # Выбираем клавиатуру в зависимости от статуса подписки
-    keyboard = subscription_keyboard_with_sub if has_subscription else subscription_keyboard_without_sub
+    write_log(f"{user_id} открыл раздел подписки") 
 
     content = as_list(
-        BlockQuote(Bold("Цены на подписку")),
+        BlockQuote(Bold("💎 Подписка")),
         "",
         Bold("🚀 Обычная подписка:"),
         Bold("└ Навсегда — 5$"),
@@ -741,102 +701,6 @@ async def handle_subscription(callback: CallbackQuery):
     )
     await callback.answer()
 
-# === Получить подписку ===
-@dp.callback_query(F.data == "get_subscription")
-async def handle_get_subscription(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    
-    # Записываем действие и проверяем авто-модерацию (callback)
-    from syym import record_user_action, check_and_auto_ban
-    if not is_admin(user_id):
-        record_user_action(user_id, "callback")
-        if await check_and_auto_ban(user_id, bot=bot, action_type="callback"):
-            return  # Тихий игнор
-    
-    # Проверяем режим техобслуживания
-    if await check_maintenance_mode(user_id, callback=callback):
-        return
-    
-    # Проверяем бан и отправляем сообщение при первом обращении
-    if await check_ban_and_notify(user_id, bot=bot, callback=callback):
-        return  # Тихий игнор
-
-    write_log(f"{user_id} запросил получение подписки")
-    
-    # Проверяем, есть ли уже подписка
-    if get_subscription_status(user_id):
-        await callback.answer("✅ У вас уже есть активная подписка!", show_alert=True)
-        return
-    
-    # Выдаем подписку
-    success = update_subscription_status(user_id, True)
-    
-    if success:
-        await callback.answer("🎉 Подписка успешно активирована!", show_alert=True)
-        write_log(f"Пользователю {user_id} выдана подписка")
-        
-        # Обновляем сообщение
-        await callback.message.edit_text(
-            f"💎 <b>Подписка</b>\n\n"
-            f"<b>Статус:</b> ✅ Активна\n\n"
-            f"<b>🎯 Бета-тест</b>\n"
-            f"Сейчас идет бета-тест, поэтому все подписки <b>бесплатные</b>!\n\n"
-            f"<i>🎉 Поздравляем! Ваша подписка активирована.</i>",
-            parse_mode="html",
-            reply_markup=subscription_keyboard_with_sub
-        )
-    else:
-        await callback.answer("❌ Ошибка при активации подписки", show_alert=True)
-        write_log(f"Ошибка при выдаче подписки пользователю {user_id}")
-
-# === Забрать подписку ===
-@dp.callback_query(F.data == "remove_subscription")
-async def handle_remove_subscription(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    
-    # Записываем действие и проверяем авто-модерацию (callback)
-    from syym import record_user_action, check_and_auto_ban
-    if not is_admin(user_id):
-        record_user_action(user_id, "callback")
-        if await check_and_auto_ban(user_id, bot=bot, action_type="callback"):
-            return  # Тихий игнор
-    
-    # Проверяем режим техобслуживания
-    if await check_maintenance_mode(user_id, callback=callback):
-        return
-    
-    # Проверяем бан и отправляем сообщение при первом обращении
-    if await check_ban_and_notify(user_id, bot=bot, callback=callback):
-        return  # Тихий игнор
-
-    write_log(f"{user_id} запросил отзыв подписки")
-    
-    # Проверяем, есть ли подписка
-    if not get_subscription_status(user_id):
-        await callback.answer("❌ У вас нет активной подписки!", show_alert=True)
-        return
-    
-    # Забираем подписку
-    success = update_subscription_status(user_id, False)
-    
-    if success:
-        await callback.answer("🗑️ Подписка успешно отозвана!", show_alert=True)
-        write_log(f"У пользователя {user_id} отозвана подписка")
-        
-        # Обновляем сообщение
-        await callback.message.edit_text(
-            f"💎 <b>Подписка</b>\n\n"
-            f"<b>Статус:</b> ❌ Неактивна\n\n"
-            f"<b>🎯 Бета-тест</b>\n"
-            f"Сейчас идет бета-тест, поэтому все подписки <b>бесплатные</b>!\n\n"
-            f"<i>Подписка отозвана. Вы можете получить её снова в любое время.</i>",
-            parse_mode="html",
-            reply_markup=subscription_keyboard_without_sub
-        )
-    else:
-        await callback.answer("❌ Ошибка при отзыве подписки", show_alert=True)
-        write_log(f"Ошибка при отзыве подписки у пользователя {user_id}")
-
 # === Информация ===
 @dp.callback_query(F.data == "info")
 async def handle_info(callback: CallbackQuery):
@@ -867,7 +731,7 @@ async def handle_info(callback: CallbackQuery):
     await callback.answer()
 
 # === меню выбора типа сноса ===
-@dp.callback_query(F.data == "demon")
+@dp.callback_query(F.data == "start")
 async def handle_demon(callback: CallbackQuery):
     user_id = callback.from_user.id
     
@@ -890,7 +754,7 @@ async def handle_demon(callback: CallbackQuery):
     
     # Показываем меню выбора
     content = as_list(
-        BlockQuote(Bold("Выберите действие ниже:")),
+        BlockQuote(Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ")),
     )
 
     await callback.message.edit_text(
@@ -1060,29 +924,17 @@ async def handle_back(callback: CallbackQuery):
     if await check_ban_and_notify(user_id, bot=bot, callback=callback):
         return  # Тихий игнор
 
-    hour = datetime.now().hour
-    if 5 <= hour < 12:
-        greet = "Доброе утро"
-    elif 12 <= hour < 18:
-        greet = "Добрый день"
-    elif 18 <= hour < 23:
-        greet = "Добрый вечер"
-    else:
-        greet = "Доброй ночи"
-    
-    quote_text = f"{greet}, {callback.from_user.full_name}!"
+    quote_text = f"Доброго времени суток, {callback.from_user.full_name}!"
     
     # Формируем контент с цитатой и приветствием
     content = as_list(
         Bold(f"{quote_text}"),
         "",
-        BlockQuote(Bold("Выберите действие ниже:"))
+        BlockQuote(Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ"))
     )
     
     await callback.message.edit_text(**content.as_kwargs(), reply_markup=main_keyboard)
     await callback.answer()
-
-# === Админ обработчики ===
 
 # === Рассылка ===
 @dp.callback_query(F.data == "admin_broadcast")

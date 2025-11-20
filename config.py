@@ -11,7 +11,7 @@ sub_btn = InlineKeyboardButton(text="💎 Подписка", callback_data="subs
 my_btn = InlineKeyboardButton(text="👤 Профиль", callback_data="my")
 info_btn = InlineKeyboardButton(text="🚀 Информация", callback_data="info")
 back_btn = InlineKeyboardButton(text="🔙 Назад", callback_data="back")
-demon_btn = InlineKeyboardButton(text="❤️‍🔥 Начать", callback_data="demon")
+demon_btn = InlineKeyboardButton(text="❤️‍🔥 Начать", callback_data="start")
 get_sub_btn = InlineKeyboardButton(text="🎁 Получить подписку", callback_data="get_subscription")
 session_btn = InlineKeyboardButton(text="📱 Session", callback_data="session")
 main_btn = InlineKeyboardButton(text="📨 Mail", callback_data="main")
