@@ -598,7 +598,7 @@ async def handle_continue(callback: CallbackQuery):
     content = as_list(
         BlockQuote(Bold(f"Доброго времени суток, {callback.from_user.full_name}!")),
         "",
-        Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ")
+        Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ")
     )
     
     await bot.send_message(user_id, **content.as_kwargs(), reply_markup=main_keyboard)
@@ -632,7 +632,7 @@ async def handle_my(callback: CallbackQuery):
 
     content = as_list(
         BlockQuote(Bold("👤 Профиль")),
-        "",
+        Bold("ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ"),
         Bold(f"🔹 Имя: {user.full_name}"), 
         Bold(f"🔹 ID: {user.id}"),  
         Bold(f"🔹 Подписка: {subscription_status}"),
@@ -671,7 +671,7 @@ async def handle_subscription(callback: CallbackQuery):
         "",
         Bold("🚀 Обычная подписка:"),
         Bold("└ Навсегда — 5$"),
-        "",
+        Bold("ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ"),
         Bold("👑 Премиум апгрейд:"),
         Bold("└ Навсегда — 3$"),
         "",
@@ -724,7 +724,7 @@ async def handle_info(callback: CallbackQuery):
     write_log(f"{user_id} открыл раздел информации")
 
     await callback.message.edit_text(
-            **BlockQuote(Bold("Информация")).as_kwargs(),
+            **BlockQuote(Bold("Информацияㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ")).as_kwargs(),
             reply_markup=info_keyboard
         )
     
