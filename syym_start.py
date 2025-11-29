@@ -264,7 +264,7 @@ async def start_message(message: Message):
         content = as_list(
             Bold(quote_text),
             "",
-            BlockQuote(Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ"))
+            BlockQuote(Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤ"))
         )
 
         await bot.send_message(
@@ -277,7 +277,7 @@ async def start_message(message: Message):
     # === НОВЫЕ пользователи ===
     else:
         content = as_list(
-            Bold(f"Доброго времени суток, {message.from_user.full_name}!ㅤㅤㅤㅤㅤㅤㅤㅤ"),
+            Bold(f"Доброго времени суток, {message.from_user.full_name}!"),
             "",
             BlockQuote("Мы рады приветствовать вас в официальном Telegram-боте нашего сервиса, мы специализируемся в помощи с сессиями."),
             "",
@@ -632,7 +632,7 @@ async def handle_my(callback: CallbackQuery):
 
     content = as_list(
         BlockQuote(Bold("👤 Профиль")),
-        Bold("ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ"),
+        Bold("ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ"),
         Bold(f"🔹 Имя: {user.full_name}"), 
         Bold(f"🔹 ID: {user.id}"),  
         Bold(f"🔹 Подписка: {subscription_status}"),
@@ -671,7 +671,7 @@ async def handle_subscription(callback: CallbackQuery):
         "",
         Bold("🚀 Обычная подписка:"),
         Bold("└ Навсегда — 5$"),
-        Bold("ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ"),
+        Bold("ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ"),
         Bold("👑 Премиум апгрейд:"),
         Bold("└ Навсегда — 3$"),
         "",
@@ -724,7 +724,7 @@ async def handle_info(callback: CallbackQuery):
     write_log(f"{user_id} открыл раздел информации")
 
     await callback.message.edit_text(
-            **BlockQuote(Bold("Информацияㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ")).as_kwargs(),
+            **BlockQuote(Bold("Информацияㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ")).as_kwargs(),
             reply_markup=info_keyboard
         )
     
@@ -754,7 +754,7 @@ async def handle_demon(callback: CallbackQuery):
     
     # Показываем меню выбора
     content = as_list(
-        BlockQuote(Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ")),
+        BlockQuote(Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤ"))
     )
 
     await callback.message.edit_text(
@@ -792,7 +792,7 @@ async def handle_session(callback: CallbackQuery):
     
     if not has_subscription:
         await callback.message.edit_text(
-            **BlockQuote(Bold("❌ оплати!")).as_kwargs(),
+            **BlockQuote(Bold("❌ оплати!ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ")).as_kwargs(),
             reply_markup=back_keyboard
         )
         await callback.answer()
@@ -930,7 +930,7 @@ async def handle_back(callback: CallbackQuery):
     content = as_list(
         Bold(f"{quote_text}"),
         "",
-        BlockQuote(Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ"))
+        BlockQuote(Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤ"))
     )
     
     await callback.message.edit_text(**content.as_kwargs(), reply_markup=main_keyboard)
@@ -1532,7 +1532,7 @@ async def handle_all_messages(message: Message):
                 
                 if is_auto_ban:
                     # Автоматический бан - добавляем кнопку "Оспорить нарушение"
-                    await message.answer(**BlockQuote(Bold("👮‍♂️ Auto-ban\n\n🚫 Вы превысили лимит запросов и были заблокированы навсегда")).as_kwargs(),reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⚡️ Оспорить нарушение", url="https://t.me/unsedb")]]))
+                    return
 
                 else:
                     # Ручной бан - добавляем текст о том, что нельзя оспорить
@@ -2009,21 +2009,17 @@ async def handle_all_messages(message: Message):
     
     # Обработка неизвестных команд для всех пользователей
     if message.text.startswith('/'):
-        # Проверяем бан - если забанен, тихо игнорируем
+         # Проверяем бан - если забанен, тихо игнорируем
         if not is_admin(user_id) and is_banned(user_id):
             return  # Тихий игнор
-
+        if is_ban_notified(user_id):
+            return
+        
         await message.answer(
             "🌀 <b>Команда не найдена или не доступна Вам!</b>\n\n"
             "Для перехода в меню пропишите /start",
             parse_mode="html"
         )
-        write_log(f"Пользователь {user_id} использовал неизвестную команду: {message.text}")
-        # Удаляем сообщение команды
-        try:
-            await message.delete()
-        except:
-            pass
         return
     
     # Обработка любых других сообщений (не команд) для всех пользователей
@@ -2031,19 +2027,14 @@ async def handle_all_messages(message: Message):
         # Проверяем бан - если забанен, тихо игнорируем
         if not is_admin(user_id) and is_banned(user_id):
             return  # Тихий игнор
-        
+        if is_ban_notified(user_id):
+            return
         
         await message.answer(
             "🌀 <b>Команда не найдена или не доступна Вам!</b>\n\n"
             "Для перехода в меню пропишите /start",
             parse_mode="html"
         )
-        write_log(f"Пользователь {user_id} отправил неизвестное сообщение: {message.text}")
-        # Удаляем сообщение
-        try:
-            await message.delete()
-        except:
-            pass
         return
 
 # === Запуск ===
