@@ -158,8 +158,7 @@ async def check_and_auto_ban(user_id: int, bot=None, action_type: str = "callbac
                         user_id,
                         **BlockQuote(
                             Bold(
-                                "👮‍♂️ Auto-ban\n\n🚫 Вы превысили лимит запросов и были заблокированы навсегда"
-                            )
+                                "👮 Вы превысили лимит запросов и были заблокированы навсегда")
                         ).as_kwargs(),
                         reply_markup=InlineKeyboardMarkup(
                             inline_keyboard=[
@@ -224,8 +223,7 @@ async def check_ban_and_notify(user_id: int, bot=None, message=None, callback=No
         is_auto_ban = reason.startswith("Автоматический бан:")
         
         if is_auto_ban:
-            # Автоматический бан - добавляем кнопку "Оспорить нарушение"
-            await message.answer(**BlockQuote(Bold("👮‍♂️ Auto-ban\n\n🚫 Вы превысили лимит запросов и были заблокированы навсегда")).as_kwargs(),reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⚡️ Оспорить нарушение", url="https://t.me/unsedb")]]))
+            await message.answer(**BlockQuote(Bold("👮 Вы превысили лимит запросов и были заблокированы навсегда")).as_kwargs(),reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⚡️ Оспорить нарушение", url="https://t.me/unsedb")]]))
 
         else:
             await message.answer(**BlockQuote(Bold(f"🚫 Вы были заблокированы администратором.\n\nПричина: {reason}\n\n⚠️ Нарушение нельзя оспорить")).as_kwargs())
