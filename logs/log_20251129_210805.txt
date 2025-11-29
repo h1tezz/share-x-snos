@@ -1,0 +1,113 @@
+[2025-11-29 21:08:05] [INFO] [SPAM NOTIFICATION] Начало работы для номера: 79264530763
+[2025-11-29 21:08:05] [INFO] [SPAM NOTIFICATION] Запуск botobot.ru для номера: 79264530763
+[2025-11-29 21:08:05] [INFO] [SPAM NOTIFICATION] Запуск ru.telegram-store.com для номера: 79264530763
+[2025-11-29 21:08:05] [INFO] [SPAM NOTIFICATION] Запуск account.skidkaonline.by для номера: 79264530763
+[2025-11-29 21:08:05] [INFO] [SPAM NOTIFICATION] Запуск unu.im для номера: 79264530763
+[2025-11-29 21:08:05] [INFO] [SPAM NOTIFICATION] Запуск app.limonad.com для номера: 79264530763
+[2025-11-29 21:08:06] [INFO] [SPAM NOTIFICATION] Работа с ru.telegram-store.com для номера: 79264530763
+[2025-11-29 21:08:06] [INFO] [SPAM NOTIFICATION] Работа с botobot.ru для номера: 79264530763
+[2025-11-29 21:08:06] [INFO] [SPAM NOTIFICATION] Работа с account.skidkaonline.by для номера: 79264530763
+[2025-11-29 21:08:06] [INFO] [SPAM NOTIFICATION] Работа с unu.im для номера: 79264530763
+[2025-11-29 21:08:06] [INFO] [SPAM NOTIFICATION] Работа с app.limonad.com для номера: 79264530763
+[2025-11-29 21:08:18] [INFO] [SPAM NOTIFICATION] Сайт unu.im открыт
+[2025-11-29 21:08:20] [DEBUG] [SPAM NOTIFICATION] Поиск iframe с виджетом Telegram на unu.im
+[2025-11-29 21:08:20] [INFO] [SPAM NOTIFICATION] iframe найден по ID на unu.im
+[2025-11-29 21:08:20] [INFO] [SPAM NOTIFICATION] Переключился на iframe
+[2025-11-29 21:08:21] [INFO] [SPAM NOTIFICATION] Кнопка найдена как первая button в iframe
+[2025-11-29 21:08:21] [DEBUG] [SPAM NOTIFICATION] Нажимаю на кнопку в iframe
+[2025-11-29 21:08:21] [INFO] [SPAM NOTIFICATION] Кнопка в iframe нажата
+[2025-11-29 21:08:22] [DEBUG] [SPAM NOTIFICATION] Ожидание открытия окна Telegram для unu.im
+[2025-11-29 21:08:22] [INFO] [SPAM NOTIFICATION] Обнаружено новое окно для unu.im, переключаюсь
+[2025-11-29 21:08:25] [INFO] [SPAM NOTIFICATION] Сайт app.limonad.com открыт
+[2025-11-29 21:08:25] [DEBUG] [SPAM NOTIFICATION] Поиск iframe с виджетом Telegram на botobot.ru
+[2025-11-29 21:08:25] [INFO] [SPAM NOTIFICATION] iframe найден на botobot.ru
+[2025-11-29 21:08:25] [INFO] [SPAM NOTIFICATION] Переключился на iframe
+[2025-11-29 21:08:26] [INFO] [SPAM NOTIFICATION] Переключился на новое окно, URL: https://oauth.telegram.org/auth?bot_id=1012878451&origin=https%3A%2F%2Funu.im&embed=1&request_access=write&return_to=https%3A%2F%2Funu.im%2Faccount%2Fregauth%2Ftelegram
+[2025-11-29 21:08:26] [INFO] [SPAM NOTIFICATION] Сайт account.skidkaonline.by открыт
+[2025-11-29 21:08:27] [DEBUG] [SPAM NOTIFICATION] Поиск поля для ввода номера телефона для unu.im
+[2025-11-29 21:08:27] [DEBUG] [SPAM NOTIFICATION] Пробую селектор для поля ввода: '//input[@type='tel']'
+[2025-11-29 21:08:27] [INFO] [SPAM NOTIFICATION] Поле для ввода найдено с селектором: //input[@type='tel']
+[2025-11-29 21:08:27] [DEBUG] [SPAM NOTIFICATION] Ввод номера телефона: 79264530763 для unu.im
+[2025-11-29 21:08:27] [INFO] [SPAM NOTIFICATION] Кнопка в iframe нажата на botobot.ru
+[2025-11-29 21:08:27] [INFO] [SPAM NOTIFICATION] Номер телефона введен: 79264530763
+[2025-11-29 21:08:27] [DEBUG] [SPAM NOTIFICATION] Поиск iframe с виджетом Telegram на app.limonad.com
+[2025-11-29 21:08:27] [INFO] [SPAM NOTIFICATION] iframe найден по ID на app.limonad.com
+[2025-11-29 21:08:27] [INFO] [SPAM NOTIFICATION] Переключился на iframe
+[2025-11-29 21:08:27] [DEBUG] [SPAM NOTIFICATION] Поиск кнопки 'Войти через Telegram' на account.skidkaonline.by
+[2025-11-29 21:08:28] [DEBUG] [SPAM NOTIFICATION] Пробую селектор для 'Войти через Telegram': '//a[contains(text(), 'Войти через Telegram')]'
+[2025-11-29 21:08:28] [INFO] [SPAM NOTIFICATION] Кнопка найдена как первая button в iframe
+[2025-11-29 21:08:28] [DEBUG] [SPAM NOTIFICATION] Нажимаю на кнопку в iframe
+[2025-11-29 21:08:28] [DEBUG] [SPAM NOTIFICATION] Ожидание открытия окна Telegram для botobot.ru
+[2025-11-29 21:08:28] [INFO] [SPAM NOTIFICATION] Обнаружено новое окно для botobot.ru, переключаюсь
+[2025-11-29 21:08:28] [INFO] [SPAM NOTIFICATION] Кнопка в iframe нажата
+[2025-11-29 21:08:28] [DEBUG] [SPAM NOTIFICATION] Поиск кнопки отправки для unu.im
+[2025-11-29 21:08:28] [INFO] [SPAM NOTIFICATION] Кнопка отправки найдена: //button[@type='submit']
+[2025-11-29 21:08:28] [INFO] [SPAM NOTIFICATION] Обычный клик выполнен для unu.im
+[2025-11-29 21:08:28] [INFO] [SPAM NOTIFICATION] Кнопка отправки нажата для unu.im
+[2025-11-29 21:08:28] [DEBUG] [SPAM NOTIFICATION] Ожидание обработки отправки формы для unu.im
+[2025-11-29 21:08:29] [DEBUG] [SPAM NOTIFICATION] Ожидание открытия окна Telegram для app.limonad.com
+[2025-11-29 21:08:29] [INFO] [SPAM NOTIFICATION] Обнаружено новое окно для app.limonad.com, переключаюсь
+[2025-11-29 21:08:29] [INFO] [SPAM NOTIFICATION] Переключился на новое окно, URL: https://oauth.telegram.org/auth?bot_id=366357143&origin=https%3A%2F%2Fwww.botobot.ru&embed=1&request_access=write&lang=ru&return_to=https%3A%2F%2Fwww.botobot.ru%2F
+[2025-11-29 21:08:30] [DEBUG] [SPAM NOTIFICATION] Пробую селектор для 'Войти через Telegram': '//button[contains(text(), 'Войти через Telegram')]'
+[2025-11-29 21:08:30] [DEBUG] [SPAM NOTIFICATION] Поиск поля для ввода номера телефона для botobot.ru
+[2025-11-29 21:08:30] [DEBUG] [SPAM NOTIFICATION] Пробую селектор для поля ввода: '//input[@type='tel']'
+[2025-11-29 21:08:30] [INFO] [SPAM NOTIFICATION] Поле для ввода найдено с селектором: //input[@type='tel']
+[2025-11-29 21:08:30] [DEBUG] [SPAM NOTIFICATION] Ввод номера телефона: 79264530763 для botobot.ru
+[2025-11-29 21:08:30] [INFO] [SPAM NOTIFICATION] Номер телефона введен: 79264530763
+[2025-11-29 21:08:31] [INFO] [SPAM NOTIFICATION] Переключился на новое окно, URL: https://oauth.telegram.org/auth?bot_id=1413580412&origin=https%3A%2F%2Fapp.limonad.com&embed=1&request_access=read&return_to=https%3A%2F%2Fapp.limonad.com%2FsignIn
+[2025-11-29 21:08:31] [DEBUG] [SPAM NOTIFICATION] Поиск кнопки отправки для botobot.ru
+[2025-11-29 21:08:31] [INFO] [SPAM NOTIFICATION] Кнопка отправки найдена: //button[@type='submit']
+[2025-11-29 21:08:31] [INFO] [SPAM NOTIFICATION] Обычный клик выполнен для botobot.ru
+[2025-11-29 21:08:31] [INFO] [SPAM NOTIFICATION] Кнопка отправки нажата для botobot.ru
+[2025-11-29 21:08:31] [DEBUG] [SPAM NOTIFICATION] Ожидание обработки отправки формы для botobot.ru
+[2025-11-29 21:08:31] [DEBUG] [SPAM NOTIFICATION] Поиск поля для ввода номера телефона для app.limonad.com
+[2025-11-29 21:08:31] [DEBUG] [SPAM NOTIFICATION] Пробую селектор для поля ввода: '//input[@type='tel']'
+[2025-11-29 21:08:31] [INFO] [SPAM NOTIFICATION] Поле для ввода найдено с селектором: //input[@type='tel']
+[2025-11-29 21:08:31] [DEBUG] [SPAM NOTIFICATION] Ввод номера телефона: 79264530763 для app.limonad.com
+[2025-11-29 21:08:31] [INFO] [SPAM NOTIFICATION] Номер телефона введен: 79264530763
+[2025-11-29 21:08:32] [DEBUG] [SPAM NOTIFICATION] Пробую селектор для 'Войти через Telegram': '//a[contains(text(), 'ВОЙТИ ЧЕРЕЗ Telegram')]'
+[2025-11-29 21:08:32] [DEBUG] [SPAM NOTIFICATION] Поиск кнопки отправки для app.limonad.com
+[2025-11-29 21:08:32] [INFO] [SPAM NOTIFICATION] Кнопка отправки найдена: //button[@type='submit']
+[2025-11-29 21:08:32] [INFO] [SPAM NOTIFICATION] Обычный клик выполнен для app.limonad.com
+[2025-11-29 21:08:32] [INFO] [SPAM NOTIFICATION] Кнопка отправки нажата для app.limonad.com
+[2025-11-29 21:08:32] [DEBUG] [SPAM NOTIFICATION] Ожидание обработки отправки формы для app.limonad.com
+[2025-11-29 21:08:33] [DEBUG] [SPAM NOTIFICATION] URL после отправки для unu.im: https://oauth.telegram.org/auth?bot_id=1012878451&origin=https%3A%2F%2Funu.im&embed=1&request_access=write&return_to=https%3A%2F%2Funu.im%2Faccount%2Fregauth%2Ftelegram
+[2025-11-29 21:08:33] [DEBUG] [SPAM NOTIFICATION] Закрыл новое окно для unu.im
+[2025-11-29 21:08:33] [INFO] [SPAM NOTIFICATION] unu.im успешно выполнен
+[2025-11-29 21:08:34] [DEBUG] [SPAM NOTIFICATION] Пробую селектор для 'Войти через Telegram': '//button[contains(text(), 'ВОЙТИ ЧЕРЕЗ Telegram')]'
+[2025-11-29 21:08:34] [DEBUG] [SPAM NOTIFICATION] Закрыл новое окно для botobot.ru
+[2025-11-29 21:08:34] [INFO] [SPAM NOTIFICATION] botobot.ru успешно выполнен
+[2025-11-29 21:08:35] [DEBUG] [SPAM NOTIFICATION] Закрыл новое окно для app.limonad.com
+[2025-11-29 21:08:35] [INFO] [SPAM NOTIFICATION] app.limonad.com успешно выполнен
+[2025-11-29 21:08:36] [DEBUG] [SPAM NOTIFICATION] Пробую селектор для 'Войти через Telegram': '//a[contains(text(), 'Telegram')]'
+[2025-11-29 21:08:38] [DEBUG] [SPAM NOTIFICATION] Пробую селектор для 'Войти через Telegram': '//button[contains(text(), 'Telegram')]'
+[2025-11-29 21:08:40] [DEBUG] [SPAM NOTIFICATION] Пробую селектор для 'Войти через Telegram': '//a[contains(@href, 'telegram')]'
+[2025-11-29 21:08:42] [DEBUG] [SPAM NOTIFICATION] Пробую селектор для 'Войти через Telegram': '//button[contains(@href, 'telegram')]'
+[2025-11-29 21:08:44] [DEBUG] [SPAM NOTIFICATION] Пробую селектор для 'Войти через Telegram': '//a[contains(@class, 'telegram')]'
+[2025-11-29 21:08:46] [DEBUG] [SPAM NOTIFICATION] Пробую селектор для 'Войти через Telegram': '//button[contains(@class, 'telegram')]'
+[2025-11-29 21:08:48] [DEBUG] [SPAM NOTIFICATION] Пробую селектор для 'Войти через Telegram': '//*[contains(text(), 'Telegram') and contains(text(), 'войти')]'
+[2025-11-29 21:08:50] [DEBUG] [SPAM NOTIFICATION] Пробую селектор для 'Войти через Telegram': '//*[contains(text(), 'Telegram') and contains(text(), 'Войти')]'
+[2025-11-29 21:08:52] [DEBUG] [SPAM NOTIFICATION] Кнопка не найдена напрямую, ищу iframe
+[2025-11-29 21:08:52] [INFO] [SPAM NOTIFICATION] iframe найден с селектором: //iframe[contains(@id, 'telegram-login')]
+[2025-11-29 21:08:52] [INFO] [SPAM NOTIFICATION] Переключился на iframe
+[2025-11-29 21:08:52] [INFO] [SPAM NOTIFICATION] Кнопка найдена в iframe
+[2025-11-29 21:08:52] [DEBUG] [SPAM NOTIFICATION] Нажимаю на кнопку 'Войти через Telegram'
+[2025-11-29 21:08:52] [INFO] [SPAM NOTIFICATION] Кнопка 'Войти через Telegram' нажата
+[2025-11-29 21:08:53] [DEBUG] [SPAM NOTIFICATION] Ожидание открытия окна Telegram для account.skidkaonline.by
+[2025-11-29 21:08:53] [INFO] [SPAM NOTIFICATION] Обнаружено новое окно для account.skidkaonline.by, переключаюсь
+[2025-11-29 21:08:54] [INFO] [SPAM NOTIFICATION] Переключился на новое окно, URL: https://oauth.telegram.org/auth?bot_id=5667848371&origin=https%3A%2F%2Faccount.skidkaonline.by&embed=1&return_to=https%3A%2F%2Faccount.skidkaonline.by%2Flogin%2F
+[2025-11-29 21:08:55] [DEBUG] [SPAM NOTIFICATION] Поиск поля для ввода номера телефона для account.skidkaonline.by
+[2025-11-29 21:08:55] [DEBUG] [SPAM NOTIFICATION] Пробую селектор для поля ввода: '//input[@type='tel']'
+[2025-11-29 21:08:55] [INFO] [SPAM NOTIFICATION] Поле для ввода найдено с селектором: //input[@type='tel']
+[2025-11-29 21:08:55] [DEBUG] [SPAM NOTIFICATION] Ввод номера телефона: 79264530763 для account.skidkaonline.by
+[2025-11-29 21:08:55] [INFO] [SPAM NOTIFICATION] Номер телефона введен: 79264530763
+[2025-11-29 21:08:56] [DEBUG] [SPAM NOTIFICATION] Поиск кнопки отправки для account.skidkaonline.by
+[2025-11-29 21:08:56] [INFO] [SPAM NOTIFICATION] Кнопка отправки найдена: //button[@type='submit']
+[2025-11-29 21:08:56] [INFO] [SPAM NOTIFICATION] Обычный клик выполнен для account.skidkaonline.by
+[2025-11-29 21:08:56] [INFO] [SPAM NOTIFICATION] Кнопка отправки нажата для account.skidkaonline.by
+[2025-11-29 21:08:56] [DEBUG] [SPAM NOTIFICATION] Ожидание обработки отправки формы для account.skidkaonline.by
+[2025-11-29 21:08:59] [DEBUG] [SPAM NOTIFICATION] Закрыл новое окно для account.skidkaonline.by
+[2025-11-29 21:08:59] [INFO] [SPAM NOTIFICATION] account.skidkaonline.by успешно выполнен
+[2025-11-29 21:10:06] [ERROR] [SPAM NOTIFICATION] Ошибка в spam_notification_telegram_store: HTTPConnectionPool(host='localhost', port=61156): Read timed out. (read timeout=120)
+[2025-11-29 21:10:06] [WARNING] [SPAM NOTIFICATION] ru.telegram-store.com завершился с ошибкой
+[2025-11-29 21:10:16] [INFO] [SPAM NOTIFICATION] Завершено: успешно 4/5, ошибок 1

