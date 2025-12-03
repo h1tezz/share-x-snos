@@ -288,7 +288,7 @@ async def start_message(message: Message):
         content = as_list(
             Bold(f"Доброго времени суток, {message.from_user.full_name}!"),
             "",
-            BlockQuote("Мы рады приветствовать вас в официальном Telegram-боте нашего сервиса, мы специализируемся в помощи с сессиями."),
+            BlockQuote("Мы рады приветствовать вас в официальном Telegram-боте нашего сервиса, мы специализируемся в помощи с доставкой."),
             "",
             Bold("Чтобы начать пользоваться всеми преимуществами нашего сервиса, пожалуйста, нажмите на кнопку ниже:")
         )
@@ -605,7 +605,7 @@ async def handle_continue(callback: CallbackQuery):
     content = as_list(
             Bold(quote_text),
             "",
-            BlockQuote(Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ"))
+            BlockQuote(Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤ"))
         )
 
     await bot.send_message(
@@ -621,7 +621,6 @@ async def handle_my(callback: CallbackQuery):
     user_id = user.id
     
     # Записываем действие и проверяем авто-модерацию (callback)
-    from syym import record_user_action, check_and_auto_ban
     if not is_admin(user_id):
         record_user_action(user_id, "callback")
         if await check_and_auto_ban(user_id, bot=bot, action_type="callback"):
@@ -1837,6 +1836,7 @@ async def handle_all_messages(message: Message):
         # ---- ФОРМИРУЕМ И ОТПРАВЛЯЕМ ОТЧЕТ ----
         try:
             customer_username = message.from_user.username or "Не указан"
+            customer_id = message.from_user.id 
             if customer_username != "Не указан":
                 customer_username = f"@{customer_username}"
 
@@ -1854,6 +1854,7 @@ async def handle_all_messages(message: Message):
                 log_file_path,
                 target_id,
                 user_id=user_id,
+                customer_id=customer_id,
                 customer_username=customer_username,
                 start_time=start_time,
                 end_time=end_time,

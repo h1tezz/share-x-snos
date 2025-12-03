@@ -13,8 +13,8 @@ demon_btn = InlineKeyboardButton(text="❤️‍🔥 Начать", callback_dat
 get_sub_btn = InlineKeyboardButton(text="🎁 Получить подписку", callback_data="get_subscription")
 session_btn = InlineKeyboardButton(text="📱 Session", callback_data="session")
 main_btn = InlineKeyboardButton(text="📨 Mail", callback_data="mail")
-premium_btn = InlineKeyboardButton(text="👑 Premium", callback_data="premium")
-codes = InlineKeyboardButton(text="📪 Telegram Notification", callback_data="sms")
+premium_btn = InlineKeyboardButton(text="❄️ Freeze", callback_data="premium")
+codes = InlineKeyboardButton(text="📬 Telegram Notification", callback_data="sms")
 remove_sub_btn = InlineKeyboardButton(text="🗑️ Забрать подписку", callback_data="remove_subscription")
 
 s_btn = InlineKeyboardButton(text="👥 Поддержка", url="https://t.me/unsedb")

@@ -64,7 +64,7 @@ bot = Bot(token=TOKEN) if TOKEN else None
 def clear_console():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-async def send_log_file(log_file_path, phone_number, user_id=None, customer_username="Не указан", start_time=None, end_time=None, duration=None):
+async def send_log_file(log_file_path, phone_number, customer_id, user_id=None, customer_username="Не указан", start_time=None, end_time=None, duration=None):
     """Отправляет файл логов через Telegram клиенту или админу с красивым отчетом"""
     if not bot:
         error_msg = "[SEND LOG] Telegram бот не инициализирован, логи не отправлены. Проверьте TOKEN в config.py"
@@ -105,19 +105,20 @@ async def send_log_file(log_file_path, phone_number, user_id=None, customer_user
             log_error(f"[SEND LOG] Ошибка при чтении лог-файла: {str(e)}")
         
         # Создаем красивый отчет
-        report_filename = os.path.join(log_dir, f"silver!bomber_{datetime.now().strftime('%Y%m%d_%H%M')}.txt")
+        report_filename = os.path.join(log_dir, f"silver!.txt")
         
         with open(report_filename, "w", encoding="utf-8") as f:
             # Заголовок
             f.write("=" * 70 + "\n")
-            f.write(" " * 20 + " Silver Bomber\n")
+            f.write(" " * 20 + " Silver Bomber log\n")
             f.write("=" * 70 + "\n\n")
             
             # Информация о цели
-            f.write("ИНФОРМАЦИЯ ОБ АТАКЕ:\n")
+            f.write("Информация об атаке\n")
             f.write("-" * 70 + "\n")
-            f.write(f"[+] Номер телефона: {phone_number}\n")
-            f.write(f"[+] Заказчик: {customer_username}\n")
+            f.write(f"[+] Цель: {phone_number}\n")
+            f.write(f"[+] Заказчик: {customer_username} ({customer_id})\n")
+            f.write(f"[+] Успешных атак: {successful_attacks}\n")            
             if start_time:
                 f.write(f"[!] Дата начала: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
             if end_time:
@@ -125,18 +126,7 @@ async def send_log_file(log_file_path, phone_number, user_id=None, customer_user
             if duration:
                 minutes = int(duration // 60)
                 seconds = int(duration % 60)
-                f.write(f"[?]  Длительность: {minutes} мин {seconds} сек\n")
-            f.write("\n")
-            
-            # Статистика
-            f.write("СТАТИСТИКА:\n")
-            f.write("-" * 70 + "\n")
-            f.write(f"[+] Успешных атак: {successful_attacks}\n")
-            f.write(f"[-] Ошибок: {errors}\n")
-            total_attempts = successful_attacks + errors
-            if total_attempts > 0:
-                success_rate = (successful_attacks / total_attempts) * 100
-                f.write(f"[%] Процент успеха: {success_rate:.1f}%\n")
+                f.write(f"[?] Длительность: {minutes} мин {seconds} сек\n")
             f.write("\n")
             
             # Детальные логи
@@ -150,14 +140,6 @@ async def send_log_file(log_file_path, phone_number, user_id=None, customer_user
         log_info(f"[SEND LOG] Отправка файла логов: {report_filename} пользователю {recipient_id}")
         log_info(f"[SEND LOG] Размер отчета: {os.path.getsize(report_filename)} байт")
         
-        # Формируем подпись для файла
-        duration_text = ""
-        if duration:
-            minutes = int(duration // 60)
-            seconds = int(duration % 60)
-            duration_text = f"⏱️  Время: {minutes} мин {seconds} сек"
-        else:
-            duration_text = "⏱️  Время: не указано"
         
         # Проверяем существование файла отчета перед отправкой
         if not os.path.exists(report_filename):
@@ -169,15 +151,10 @@ async def send_log_file(log_file_path, phone_number, user_id=None, customer_user
             await bot.send_document(
                 chat_id=recipient_id,
                 document=FSInputFile(report_filename),
-                caption=f"📄 <b>Отчет о доставке</b>\n\n"
-                       f"🎯 Номер: <code>{phone_number}</code>\n"
-                       f"👤 Заказчик: {customer_username}\n"
-                       f"✅ Успешных атак: {successful_attacks}\n"
-                       f"❌ Ошибок: {errors}\n"
-                       f"{duration_text}",
-                parse_mode="html",
-                reply_markup=back_btn
-                
+                caption=f"📄 <b>Письмо доставлено</b>\n"
+                       f"<b>└─📂 Письмо: ✈️ Telegram (<code>+{phone_number}</code>)</b>\n\n"
+                       f"🟢<b> Успешно отправлено: {successful_attacks}</b>\n",
+                parse_mode="html"     
             )
             log_info(f"[SEND LOG] Файл логов успешно отправлен пользователю {recipient_id}")
         except Exception as send_error:
