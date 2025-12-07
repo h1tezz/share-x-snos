@@ -8,10 +8,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, Tuple
 
 # Импортируем ADMIN_ID из конфига
-try:
-    from config import ADMIN_ID
-except ImportError:
-    ADMIN_ID = 8428752149  # Значение по умолчанию, если конфиг не найден
+from config import ADMIN_ID
 
 DB_PATH = "sql.sql"
 
@@ -26,7 +23,6 @@ def init_database():
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
             subscription BOOLEAN DEFAULT 0,
-            premium BOOLEAN DEFAULT 0,
             banned BOOLEAN DEFAULT 0,
             ban_reason TEXT,
             ban_notified BOOLEAN DEFAULT 0
@@ -95,7 +91,7 @@ def add_user(user_id: int) -> bool:
     cursor = conn.cursor()
     
     try:
-        cursor.execute("INSERT INTO users (user_id, subscription, premium, banned) VALUES (?, 0, 0, 0)", (user_id,))
+        cursor.execute("INSERT INTO users (user_id, subscription, banned) VALUES (?, 0, 0, 0)", (user_id,))
         conn.commit()
         write_log(f"Добавлен новый пользователь {user_id}")
         return True
@@ -138,15 +134,6 @@ def get_subscription_status(user_id: int) -> bool:
     conn.close()
     return result[0] == 1 if result else False
 
-def get_premium_status(user_id: int) -> bool:
-    """Возвращает статус премиума пользователя"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT premium FROM users WHERE user_id = ?", (user_id,))
-    result = cursor.fetchone()
-    conn.close()
-    return result[0] == 1 if result else False
 
 def update_subscription_status(user_id: int, status: bool) -> bool:
     """Обновляет статус подписки пользователя"""
@@ -157,7 +144,7 @@ def update_subscription_status(user_id: int, status: bool) -> bool:
         cursor.execute("UPDATE users SET subscription = ? WHERE user_id = ?", (1 if status else 0, user_id))
         if cursor.rowcount == 0:
             # Пользователя нет, создаем его
-            cursor.execute("INSERT INTO users (user_id, subscription, premium, banned) VALUES (?, ?, 0, 0)", 
+            cursor.execute("INSERT INTO users (user_id, subscription, banned) VALUES (?, ?, 0, 0)", 
                          (user_id, 1 if status else 0))
         conn.commit()
         write_log(f"Обновлен статус подписки для {user_id}: {status}")
@@ -168,25 +155,6 @@ def update_subscription_status(user_id: int, status: bool) -> bool:
     finally:
         conn.close()
 
-def update_premium_status(user_id: int, status: bool) -> bool:
-    """Обновляет статус премиума пользователя"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    try:
-        cursor.execute("UPDATE users SET premium = ? WHERE user_id = ?", (1 if status else 0, user_id))
-        if cursor.rowcount == 0:
-            # Пользователя нет, создаем его
-            cursor.execute("INSERT INTO users (user_id, subscription, premium, banned) VALUES (?, 0, ?, 0)", 
-                         (user_id, 1 if status else 0))
-        conn.commit()
-        write_log(f"Обновлен статус премиума для {user_id}: {status}")
-        return True
-    except Exception as e:
-        write_log(f"Ошибка при обновлении премиума для {user_id}: {e}")
-        return False
-    finally:
-        conn.close()
 
 def update_ban_status(user_id: int, status: bool, reason: Optional[str] = None) -> bool:
     """Обновляет статус бана пользователя. Если status=True, reason обязателен.
@@ -212,7 +180,7 @@ def update_ban_status(user_id: int, status: bool, reason: Optional[str] = None) 
             cursor.execute("DELETE FROM banned_users WHERE user_id = ?", (user_id,))
             # Восстанавливаем пользователя с базовыми настройками
             cursor.execute("""
-                INSERT OR REPLACE INTO users (user_id, subscription, premium, banned, ban_reason, ban_notified)
+                INSERT OR REPLACE INTO users (user_id, subscription, banned, ban_reason, ban_notified)
                 VALUES (?, 0, 0, 0, NULL, 0)
             """, (user_id,))
             write_log(f"Пользователь {user_id} разбанен и восстановлен в users")
@@ -440,9 +408,7 @@ def get_promocode_info(promocode_name: str) -> Optional[Dict]:
     
     reward_text = {
         "whitelist": "Вайт лист",
-        "subscription": "Подписка",
-        "premium": "Премиум",
-        "premium_sub": "Премиум + Подписка"
+        "subscription": "Подписка"
     }.get(row[2], row[2])
     
     return {
@@ -582,9 +548,6 @@ def get_statistics() -> dict:
         cursor.execute("SELECT COUNT(*) FROM users WHERE subscription = 1")
         stats['subscribed'] = cursor.fetchone()[0]
         
-        # Количество пользователей с премиумом
-        cursor.execute("SELECT COUNT(*) FROM users WHERE premium = 1")
-        stats['premium'] = cursor.fetchone()[0]
         
     except Exception as e:
         write_log(f"Ошибка при получении статистики: {e}")
@@ -595,7 +558,6 @@ def get_statistics() -> dict:
             'whitelist': 0,
             'promocodes': 0,
             'subscribed': 0,
-            'premium': 0
         }
     finally:
         conn.close()

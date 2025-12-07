@@ -10,12 +10,10 @@ from config import *
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# === Админ ===
-ADMIN_ID = 8428752149
 
 def is_admin(user_id: int) -> bool:
     """Проверяет, является ли пользователь админом"""
-    return user_id == ADMIN_ID
+    return user_id in ADMIN_ID
 
 # === Кастомное логирование ===
 def write_log(text: str):

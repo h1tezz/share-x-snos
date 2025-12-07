@@ -1,7 +1,7 @@
 from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 
-ADMIN_ID = 273761139
-TOKEN = ''
+ADMIN_ID = [273761139, 730375970, 964238504]
+TOKEN = '8203992361:AAGS_fEbroTGPJQnl7WVujonZdMS7RiO99o'
 
 # === Кнопки ===
 continue_btn = InlineKeyboardButton(text="✈️ Продолжить", callback_data="continue")
@@ -10,10 +10,7 @@ my_btn = InlineKeyboardButton(text="👤 Профиль", callback_data="my")
 info_btn = InlineKeyboardButton(text="🌨 Информация", callback_data="info")
 back_btn = InlineKeyboardButton(text="🔙 Назад", callback_data="back")
 demon_btn = InlineKeyboardButton(text="☃️ Начать", callback_data="start")
-session_btn = InlineKeyboardButton(text="🤖 Session", callback_data="session")
-main_btn = InlineKeyboardButton(text="📨 Mail", callback_data="mail")
 premium_btn = InlineKeyboardButton(text="❄️ Freeze", callback_data="premium")
-codes = InlineKeyboardButton(text="📬 Telegram Notification", callback_data="sms")
 
 s_btn = InlineKeyboardButton(text="👥 Поддержка", url="https://t.me/lowcan")
 ch_btn = InlineKeyboardButton(text="📚 Правила", url="https://t.me/lowcan")
@@ -28,7 +25,7 @@ maintenance_btn = InlineKeyboardButton(text="🔧 Техобслуживание
 restart_btn = InlineKeyboardButton(text="🔄 Перезагрузка", callback_data="admin_restart")
 add_admin_btn = InlineKeyboardButton(text="👤 Добавить админа", callback_data="admin_add_admin")
 help_btn = InlineKeyboardButton(text="❓ Помощь", callback_data="admin_help")
-admin_back_btn = InlineKeyboardButton(text="🔙 Назад", callback_data="admin_back")
+admin_back_btn = InlineKeyboardButton(text="↪️ Назад", callback_data="admin_back")
 whitelist_btn = InlineKeyboardButton(text="📝 Белый список", callback_data="admin_whitelist")
 promocodes_btn = InlineKeyboardButton(text="🎟️ Промокоды", callback_data="admin_promocodes")
 
@@ -42,8 +39,6 @@ other_category_btn = InlineKeyboardButton(text="📋 Прочее", callback_dat
 give_sub_btn = InlineKeyboardButton(text="🎁 Выдать подписку", callback_data="admin_give_sub")
 revoke_sub_btn = InlineKeyboardButton(text="🗑️ Забрать подписку", callback_data="admin_revoke_sub")
 check_sub_btn = InlineKeyboardButton(text="🔍 Проверить подписку", callback_data="admin_check_sub")
-give_premium_btn = InlineKeyboardButton(text="👑 Выдать премиум", callback_data="admin_give_premium")
-revoke_premium_btn = InlineKeyboardButton(text="❌ Забрать премиум", callback_data="admin_revoke_premium")
 
 # === Кнопки категории Админы ===
 remove_admin_btn = InlineKeyboardButton(text="❌ Удалить админа", callback_data="admin_remove_admin")
@@ -82,7 +77,7 @@ promocodes_keyboard = InlineKeyboardMarkup(inline_keyboard=[
 # === Клавиатуры ===
 start_keyboard = InlineKeyboardMarkup(inline_keyboard=[[continue_btn]])
 main_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-    [demon_btn],
+    [premium_btn],
     [sub_btn, my_btn],
     [info_btn],
 ])
@@ -92,11 +87,7 @@ info_keyboard = InlineKeyboardMarkup(inline_keyboard=[[s_btn],
                                                       [back_btn]])
 subscription_keyboard_with_sub = InlineKeyboardMarkup(inline_keyboard=[[back_btn]])
 subscription_keyboard_without_sub = InlineKeyboardMarkup(inline_keyboard=[[back_btn]])
-snos_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-    [session_btn, main_btn,premium_btn],
-    [codes],
-    [back_btn]
-])
+
 
 # === Админ клавиатуры ===
 admin_keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -116,7 +107,6 @@ admin_bans_keyboard = InlineKeyboardMarkup(inline_keyboard=[
 admin_subscription_keyboard = InlineKeyboardMarkup(inline_keyboard=[
     [give_sub_btn, revoke_sub_btn],
     [check_sub_btn],
-    [give_premium_btn, revoke_premium_btn],
     [admin_menu_back_btn]
 ])
 

@@ -196,10 +196,8 @@ remove_admin = database.remove_admin
 add_user = database.add_user
 is_banned = database.is_banned
 get_subscription_status = database.get_subscription_status
-get_premium_status = database.get_premium_status
 is_registered = database.is_registered
 update_subscription_status = database.update_subscription_status
-update_premium_status = database.update_premium_status
 
 # Импортируем функции работы с банами из database модуля
 get_ban_reason = database.get_ban_reason

