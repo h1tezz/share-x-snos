@@ -237,35 +237,7 @@ is_whitelisted = database.is_whitelisted
 add_to_whitelist = database.add_to_whitelist
 remove_from_whitelist = database.remove_from_whitelist
 
-def update_premium_status(user_id: int, status: bool) -> bool:
-    """Обновляет статус премиума пользователя"""
-    if not os.path.exists("users.txt"):
-        return False
-    
-    lines = []
-    updated = False
-    
-    with open("users.txt", "r", encoding="utf-8") as f:
-        for line in f:
-            parts = line.strip().split(":")
-            if len(parts) >= 1 and parts[0] == str(user_id):
-                new_status = "t" if status else "f"
-                # Старый формат: 3 части - конвертируем в новый
-                if len(parts) == 3:
-                    lines.append(f"{parts[0]}:{parts[1]}:{parts[2]}:{new_status}\n")
-                # Новый формат: 4 части
-                elif len(parts) == 4:
-                    lines.append(f"{parts[0]}:{parts[1]}:{parts[2]}:{new_status}\n")
-                updated = True
-                write_log(f"Обновлен статус премиума для {user_id}: {new_status}")
-            else:
-                lines.append(line)
-    
-    if updated:
-        with open("users.txt", "w", encoding="utf-8") as f:
-            f.writelines(lines)
-    
-    return updated
+
 
 # === Тестовая команда ===
 @dp.message(Command("test"))
@@ -276,7 +248,7 @@ async def test_command(message: Message):
 @dp.message(Command("myid"))
 async def my_id_command(message: Message):
     user_id = message.from_user.id
-    await message.answer(f"Ваш ID: {user_id}")
+    await message.answer(f"Ваш ID: <code>{user_id}</code>", parse_mode="HTML")
 
 # === Команда для очистки базы данных пользователей ===
 @dp.message(Command("clean"))

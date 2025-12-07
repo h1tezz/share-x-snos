@@ -1,7 +1,6 @@
 import asyncio
 import sys
 import os
-import json
 import random
 import string
 from datetime import datetime
@@ -23,9 +22,6 @@ import database
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
-
-# === Админ ===
-ADMIN_ID = ADMIN_ID
 
 # === Executor и log_dir для fast__method ===
 executor = ThreadPoolExecutor(max_workers=1)
@@ -1999,11 +1995,11 @@ async def handle_all_messages(message: Message):
             elif action == "give_premium":
                 # Проверяем наличие подписки перед выдачей премиума
                 if not get_subscription_status(target_id):
-                    await message.answer(f"❌ Пользователь {target_id} не имеет активной подписки. Сначала выдайте подписку!")
+                    await message.answer(f"<b>❌ Пользователь {target_id} не имеет активной подписки. Сначала выдайте подписку!</b>",parse_mode="HTML")
                     return
                 success = update_premium_status(target_id, True)
                 if success:
-                    await message.answer(f"✅ Пользователю {target_id} выдан премиум")
+                    await message.answer(f"<b>✅ Пользователю {target_id} выдан премиум</b>",parse_mode="HTML")
                     write_log(f"Админ {user_id} выдал премиум пользователю {target_id}")
                 else:
                     await message.answer(f"❌ Ошибка при выдаче премиума пользователю {target_id}")
@@ -2507,9 +2503,6 @@ async def handle_promocode_check(callback: CallbackQuery):
     )
     await callback.answer()
 
-# === Обработка промокодов в текстовых сообщениях ===
-# Добавляем обработку промокодов в handle_all_messages
-
-# === Запуск бота ===
+# === запуск бота ===
 if 1 == 1:
     asyncio.run(main())

@@ -1,25 +1,23 @@
 from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 
-ADMIN_ID = 7832587042
-TOKEN = '8256862820:AAHkQn_8fAP-XV01-x9xneC5XZSZhubOi6c'
+ADMIN_ID = 273761139
+TOKEN = ''
 
 # === Кнопки ===
 continue_btn = InlineKeyboardButton(text="✈️ Продолжить", callback_data="continue")
 sub_btn = InlineKeyboardButton(text="💎 Подписка", callback_data="subscription")
 my_btn = InlineKeyboardButton(text="👤 Профиль", callback_data="my")
-info_btn = InlineKeyboardButton(text="🚀 Информация", callback_data="info")
+info_btn = InlineKeyboardButton(text="🌨 Информация", callback_data="info")
 back_btn = InlineKeyboardButton(text="🔙 Назад", callback_data="back")
-demon_btn = InlineKeyboardButton(text="❤️‍🔥 Начать", callback_data="start")
-get_sub_btn = InlineKeyboardButton(text="🎁 Получить подписку", callback_data="get_subscription")
-session_btn = InlineKeyboardButton(text="📱 Session", callback_data="session")
+demon_btn = InlineKeyboardButton(text="☃️ Начать", callback_data="start")
+session_btn = InlineKeyboardButton(text="🤖 Session", callback_data="session")
 main_btn = InlineKeyboardButton(text="📨 Mail", callback_data="mail")
 premium_btn = InlineKeyboardButton(text="❄️ Freeze", callback_data="premium")
 codes = InlineKeyboardButton(text="📬 Telegram Notification", callback_data="sms")
-remove_sub_btn = InlineKeyboardButton(text="🗑️ Забрать подписку", callback_data="remove_subscription")
 
-s_btn = InlineKeyboardButton(text="👥 Поддержка", url="https://t.me/unsedb")
-ch_btn = InlineKeyboardButton(text="📚 Правила", url="https://t.me/unsedb")
-buy_btn = InlineKeyboardButton(text="⚡ Приобрести подписку ", url="https://t.me/unsedb")
+s_btn = InlineKeyboardButton(text="👥 Поддержка", url="https://t.me/lowcan")
+ch_btn = InlineKeyboardButton(text="📚 Правила", url="https://t.me/lowcan")
+buy_btn = InlineKeyboardButton(text="⚡ Приобрести подписку ", url="https://t.me/lowcan")
 
 # === Админ кнопки ===
 broadcast_btn = InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")
@@ -52,7 +50,7 @@ remove_admin_btn = InlineKeyboardButton(text="❌ Удалить админа", 
 check_admin_btn = InlineKeyboardButton(text="🔍 Проверить админа", callback_data="admin_check_admin")
 
 # === Кнопки категории Прочее ===
-auto_moderation_btn = InlineKeyboardButton(text="🤖 Авто-модерация", callback_data="admin_auto_moderation")
+auto_moderation_btn = InlineKeyboardButton(text="👮‍♂️ Авто-модерация", callback_data="admin_auto_moderation")
 
 
 # === Кнопка вернуться в админ меню ===
