@@ -3,6 +3,13 @@ from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, C
 ADMIN_ID = [273761139, 730375970, 964238504]
 TOKEN = '8203992361:AAGS_fEbroTGPJQnl7WVujonZdMS7RiO99o'
 
+# Crypto Bot API Token (для отправки сообщений и создания платежей через Crypto Bot)
+# Получите токен на https://t.me/CryptoBot или https://pay.crypt.bot
+CRYPTO_BOT_TOKEN = "497839:AAVlA8vu1ChWlEJ2cEeRMXIFOTl913Dn9Tf"  # Установите ваш токен здесь, например: "12345:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+
+# Криптовалюта для оплаты подписки (USDT, TON, BTC, ETH, USDC, BUSD)
+CRYPTO_PAYMENT_ASSET = "USDT"  # По умолчанию USDT
+
 # === Кнопки ===
 continue_btn = InlineKeyboardButton(text="✈️ Продолжить", callback_data="continue")
 sub_btn = InlineKeyboardButton(text="💎 Подписка", callback_data="subscription")
@@ -10,7 +17,7 @@ my_btn = InlineKeyboardButton(text="👤 Профиль", callback_data="my")
 info_btn = InlineKeyboardButton(text="🌨 Информация", callback_data="info")
 back_btn = InlineKeyboardButton(text="🔙 Назад", callback_data="back")
 demon_btn = InlineKeyboardButton(text="☃️ Начать", callback_data="start")
-premium_btn = InlineKeyboardButton(text="❄️ Freeze", callback_data="premium")
+premium_btn = InlineKeyboardButton(text="❄️ Freeze", callback_data="freeze")
 
 s_btn = InlineKeyboardButton(text="👥 Поддержка", url="https://t.me/lowcan")
 ch_btn = InlineKeyboardButton(text="📚 Правила", url="https://t.me/lowcan")
@@ -61,8 +68,6 @@ white_set = InlineKeyboardMarkup(inline_keyboard=[
 reward_keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📝 Вайт лист", callback_data="promocode_reward_whitelist")],
         [InlineKeyboardButton(text="💎 Подписка", callback_data="promocode_reward_subscription")],
-        [InlineKeyboardButton(text="👑 Премиум", callback_data="promocode_reward_premium")],
-        [InlineKeyboardButton(text="👑💎 Премиум + Подписка", callback_data="promocode_reward_premium_sub")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_promocodes")]
     ])
 

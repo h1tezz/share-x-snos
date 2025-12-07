@@ -17,6 +17,11 @@ from config import *
 from syym import *
 from concurrent.futures import ThreadPoolExecutor
 import database
+try:
+    import crypto_bot
+    CRYPTO_BOT_AVAILABLE = True
+except ImportError:
+    CRYPTO_BOT_AVAILABLE = False
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -25,11 +30,15 @@ dp = Dispatcher()
 broadcast_waiting = False  # Флаг ожидания сообщения для рассылки
 
 # === Состояния для админских действий ===
-admin_action_waiting = ""  # Тип ожидаемого действия админа: "give_sub", "revoke_sub", "give_premium", "revoke_premium", "add_admin", "remove_admin", "check_sub", "check_ban", "check_admin", "whitelist_add", "whitelist_remove", "whitelist_check", "ban", "ban_reason", "unban"
+admin_action_waiting = ""  # Тип ожидаемого действия админа: "give_sub", "give_sub_days", "revoke_sub", "add_admin", "remove_admin", "check_sub", "check_ban", "check_admin", "whitelist_add", "whitelist_remove", "whitelist_check", "ban", "ban_reason", "unban"
 ban_target_id = None  # ID пользователя, которого баним (для запроса причины)
+subscription_target_id = None  # ID пользователя, которому выдаем подписку (для запроса количества дней)
 
-# === Состояния для методов (session/main/premium) ===
-method_waiting = ""  # Тип ожидаемого метода: "session", "main", "premium"
+# === Состояния для методов (session/main/freeze) ===
+method_waiting = ""  # Тип ожидаемого метода: "session", "main", "freeze"
+
+# === Состояния для платежей ===
+user_pending_payments = {}  # {user_id: {"invoice_id": str, "days": int, "amount": float}}
 
 # === Состояния для промокодов ===
 promocode_waiting = ""  # Тип ожидаемого действия: "create_promocode_name", "create_promocode_max_uses", "delete_promocode", "check_promocode"
@@ -153,7 +162,7 @@ def activate_promocode(user_id, ref_link):
     if reward == "whitelist":
         success = add_to_whitelist(user_id)
     elif reward == "subscription":
-        success = update_subscription_status(user_id, True)
+        success = database.give_subscription(user_id, days=-1)  # Навсегда
     
     if success:
         # Увеличиваем счетчик использований и отмечаем как использованный
@@ -421,6 +430,144 @@ async def log_command(message: Message):
             pass
     
 
+# === Команда для просмотра истории платежей ===
+@dp.message(Command("payments"))
+async def payments_command(message: Message):
+    user_id = message.from_user.id
+    
+    # Проверяем, что команду использует админ
+    if not is_admin(user_id):
+        await message.answer("🌀 <b>Команда не найдена или не доступна Вам!</b>\n\n"
+            "Для перехода в меню пропишите /start",
+            parse_mode="html")
+        return
+    
+    # Записываем действие и проверяем авто-модерацию (команда)
+    from syym import record_user_action, check_and_auto_ban
+    if not is_admin(user_id):
+        record_user_action(user_id, "command")
+        if await check_and_auto_ban(user_id, bot=bot, action_type="command"):
+            return
+    
+    # Проверяем режим техобслуживания
+    if await check_maintenance_mode(user_id, message=message):
+        return
+    
+    write_log(f"Админ {user_id} запросил историю платежей")
+    
+    # Получаем историю платежей
+    payments = database.get_payments_history(limit=50)
+    
+    if not payments:
+        await message.answer(
+            "📋 <b>История платежей</b>\n\n"
+            "Платежей пока нет.",
+            parse_mode="html"
+        )
+        return
+    
+    # Формируем сообщение с историей платежей
+    text_parts = ["📋 <b>Последние платежи:</b>\n"]
+    
+    for idx, payment in enumerate(payments, 1):
+        # Получаем username пользователя
+        try:
+            user_chat = await bot.get_chat(payment["user_id"])
+            username = user_chat.username
+            user_display = f"@{username}" if username else f"ID: {payment['user_id']}"
+        except:
+            user_display = f"ID: {payment['user_id']}"
+        
+        # Определяем эмодзи статуса
+        status_emoji = "✅" if payment["status"] == "paid" else "⏳"
+        
+        # Форматируем дни подписки
+        if payment["days"] == -1:
+            days_text = "forever"
+        elif payment["days"] == 30:
+            days_text = "month"
+        elif payment["days"] == 7:
+            days_text = "week"
+        elif payment["days"] == 1:
+            days_text = "day"
+        else:
+            days_text = f"{payment['days']} days"
+        
+        # Получаем короткий ID (первые 8 символов)
+        short_id = payment["invoice_id"][:8] if len(payment["invoice_id"]) > 8 else payment["invoice_id"]
+        
+        # Crypto ID
+        crypto_id = payment.get("crypto_id", payment["invoice_id"])
+        crypto_id_short = str(crypto_id)[:8] if crypto_id and len(str(crypto_id)) > 8 else str(crypto_id) if crypto_id else "N/A"
+        
+        # Формируем строку платежа
+        payment_line = (
+            f"\n{status_emoji} <b>#{len(payments) - idx + 1}</b> | {user_display}\n"
+            f"   Сумма: {payment['amount']} {payment['currency']} ({days_text})\n"
+            f"   Статус: {payment['status']} | ID: {short_id}\n"
+            f"   Crypto ID: {crypto_id_short}\n"
+        )
+        text_parts.append(payment_line)
+    
+    # Отправляем сообщение
+    full_text = "".join(text_parts)
+    
+    # Разбиваем на части если сообщение слишком длинное (Telegram лимит 4096 символов)
+    if len(full_text) > 4000:
+        # Отправляем первые платежи
+        first_part = "📋 <b>Последние платежи:</b>\n"
+        current_length = len(first_part)
+        parts_to_send = [first_part]
+        
+        for idx, payment in enumerate(payments, 1):
+            try:
+                user_chat = await bot.get_chat(payment["user_id"])
+                username = user_chat.username
+                user_display = f"@{username}" if username else f"ID: {payment['user_id']}"
+            except:
+                user_display = f"ID: {payment['user_id']}"
+            
+            status_emoji = "✅" if payment["status"] == "paid" else "⏳"
+            
+            if payment["days"] == -1:
+                days_text = "forever"
+            elif payment["days"] == 30:
+                days_text = "month"
+            elif payment["days"] == 7:
+                days_text = "week"
+            elif payment["days"] == 1:
+                days_text = "day"
+            else:
+                days_text = f"{payment['days']} days"
+            
+            short_id = payment["invoice_id"][:8] if len(payment["invoice_id"]) > 8 else payment["invoice_id"]
+            crypto_id = payment.get("crypto_id", payment["invoice_id"])
+            crypto_id_short = str(crypto_id)[:8] if crypto_id and len(str(crypto_id)) > 8 else str(crypto_id) if crypto_id else "N/A"
+            
+            payment_line = (
+                f"\n{status_emoji} <b>#{len(payments) - idx + 1}</b> | {user_display}\n"
+                f"   Сумма: {payment['amount']} {payment['currency']} ({days_text})\n"
+                f"   Статус: {payment['status']} | ID: {short_id}\n"
+                f"   Crypto ID: {crypto_id_short}\n"
+            )
+            
+            if current_length + len(payment_line) > 4000:
+                # Отправляем текущую часть и начинаем новую
+                await message.answer("".join(parts_to_send), parse_mode="html")
+                parts_to_send = [payment_line]
+                current_length = len(payment_line)
+            else:
+                parts_to_send.append(payment_line)
+                current_length += len(payment_line)
+        
+        # Отправляем последнюю часть
+        if parts_to_send:
+            await message.answer("".join(parts_to_send), parse_mode="html")
+    else:
+        await message.answer(full_text, parse_mode="html")
+    
+    write_log(f"Админ {user_id} получил историю платежей ({len(payments)} записей)")
+
 # === Команда для очистки файла пользователей ===
 @dp.message(Command("clean"))
 async def clean_users_command(message: Message):
@@ -609,8 +756,20 @@ async def handle_my(callback: CallbackQuery):
 
     write_log(f"{user.id} открыл раздел подписки")
 
-    # Получаем статус подписки и премиума из users.txt
-    subscription_status = "активна" if get_subscription_status(user.id) else "не активна"
+    # Получаем статус подписки (автоматически проверяет истекшие)
+    has_sub = get_subscription_status(user.id)
+    expires = database.get_subscription_expires(user.id)
+    
+    if has_sub:
+        if expires == -1:
+            subscription_status = "активна (навсегда)"
+        else:
+            from datetime import datetime
+            expires_dt = datetime.fromtimestamp(expires)
+            expires_str = expires_dt.strftime("%Y-%m-%d %H:%M:%S")
+            subscription_status = f"активна до {expires_str}"
+    else:
+        subscription_status = "не активна"
 
     content = as_list(
         BlockQuote(Bold("👤 Профиль")),
@@ -647,26 +806,331 @@ async def handle_subscription(callback: CallbackQuery):
 
     write_log(f"{user_id} открыл раздел подписки") 
 
+    # Проверяем текущий статус подписки (автоматически проверяет истекшие)
+    has_subscription = get_subscription_status(user_id)
+    expires = database.get_subscription_expires(user_id)
+    
+    if has_subscription:
+        if expires == -1:
+            sub_info = "✅ Активна (навсегда)"
+        else:
+            from datetime import datetime
+            expires_dt = datetime.fromtimestamp(expires)
+            expires_str = expires_dt.strftime("%Y-%m-%d %H:%M:%S")
+            sub_info = f"✅ Активна до {expires_str}"
+    else:
+        sub_info = "❌ Неактивна"
+    
     content = as_list(
         BlockQuote(Bold("💎 Подписка")),
         "",
-        Bold("🚀 Обычная подписка:"),
+        Bold(f"📊 Статус: {sub_info}"),
+        "",
+        Bold("🚀 Варианты подписки:"),
         Bold("└ 1 день — 1$"),
         Bold("└ 7 дней — 5$"),
         Bold("└ 30 дней — 10$"),
         Bold("└ Навсегда — 25$"),
         "",
-        Bold("📄 Добавление в вайт лист"),
-        Bold("└ Аккаунт — 3$"),
-        "",
-        Italic("Купить подписку можно по кнопкам ниже")
+        Italic("Выберите срок подписки для оплаты")
     )
+    
+    # Создаем клавиатуру с вариантами подписки
+    subscription_plans_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📅 1 день — 1$", callback_data="sub_plan_1")],
+        [InlineKeyboardButton(text="📅 7 дней — 5$", callback_data="sub_plan_7")],
+        [InlineKeyboardButton(text="📅 30 дней — 10$", callback_data="sub_plan_30")],
+        [InlineKeyboardButton(text="♾️ Навсегда — 25$", callback_data="sub_plan_-1")],
+        [back_btn]
+    ])
     
     await callback.message.edit_text(
         **content.as_kwargs(),
-        reply_markup=sub_keyboard
+        reply_markup=subscription_plans_keyboard
     )
     await callback.answer()
+
+# === Обработчик выбора плана подписки ===
+@dp.callback_query(F.data.startswith("sub_plan_"))
+async def handle_subscription_plan(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    
+    # Записываем действие и проверяем авто-модерацию
+    from syym import record_user_action, check_and_auto_ban
+    if not is_admin(user_id):
+        record_user_action(user_id, "callback")
+        if await check_and_auto_ban(user_id, bot=bot, action_type="callback"):
+            return
+    
+    # Проверяем режим техобслуживания
+    if await check_maintenance_mode(user_id, callback=callback):
+        return
+    
+    # Проверяем бан
+    if await check_ban_and_notify(user_id, bot=bot, callback=callback):
+        return
+    
+    # Парсим выбранный план
+    plan_key = callback.data.replace("sub_plan_", "")
+    try:
+        days = int(plan_key)
+    except ValueError:
+        await callback.answer("❌ Ошибка выбора плана", show_alert=True)
+        return
+    
+    # Получаем информацию о плане
+    plan_info = crypto_bot.SUBSCRIPTION_PLANS.get(days)
+    if not plan_info:
+        await callback.answer("❌ План не найден", show_alert=True)
+        return
+    
+    amount = plan_info["price"]
+    plan_name = plan_info["name"]
+    
+    # Проверяем текущую подписку перед покупкой
+    current_expires = database.get_subscription_expires(user_id)
+    if current_expires == -1:
+        # У пользователя подписка навсегда - не даем покупать временную
+        await callback.answer("❌ У вас уже есть подписка навсегда! Вы не можете купить временную подписку.", show_alert=True)
+        return
+    
+    write_log(f"Пользователь {user_id} выбрал план подписки: {plan_name} ({days} дней, {amount}$)")
+    
+    # Проверяем, есть ли активный платеж
+    pending_payment = database.get_user_pending_payment(user_id)
+    
+    if pending_payment:
+        # Показываем информацию о текущем платеже
+        invoice_id = pending_payment["invoice_id"]
+        content = as_list(
+            BlockQuote(Bold("💳 Оплата подписки")),
+            "",
+            Bold(f"📅 План: {plan_name}"),
+            Bold(f"💰 Сумма: {amount}$"),
+            "",
+            Bold(f"📋 ID платежа: {invoice_id}"),
+            "",
+            Italic("Используйте кнопки ниже для управления платежом")
+        )
+        
+        # Формируем ссылку на оплату согласно документации Crypto Bot API
+        payment_url = f"https://t.me/CryptoBot?start=pay_{invoice_id}"
+        
+        # Кнопки: Оплатить, Проверить, Назад
+        payment_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="💳 Оплатить", url=payment_url)],[InlineKeyboardButton(text="🔍 Проверить", callback_data=f"payment_check_{invoice_id}")],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data=f"payment_cancel_{invoice_id}")]
+        ])
+        
+        await callback.message.edit_text(
+            **content.as_kwargs(),
+            reply_markup=payment_keyboard
+        )
+        await callback.answer()
+        return
+    
+    # Создаем новый инвойс через Crypto Bot API
+    if not crypto_bot.CRYPTO_BOT_TOKEN:
+        await callback.answer("❌ Платежная система недоступна. Обратитесь к администратору.", show_alert=True)
+        return
+    
+    description = f"Подписка на {plan_name}"
+    payload = f"subscription_{user_id}_{days}"
+    
+    # Получаем asset из конфига или используем USDT по умолчанию
+    from config import CRYPTO_PAYMENT_ASSET
+    payment_asset = CRYPTO_PAYMENT_ASSET if CRYPTO_PAYMENT_ASSET else "USDT"
+    
+    invoice_result = await crypto_bot.create_invoice(
+        user_id=user_id,
+        amount=amount,
+        asset=payment_asset,
+        description=description,
+        payload=payload
+    )
+    
+    if not invoice_result.get("ok"):
+        error_msg = invoice_result.get("error", "Неизвестная ошибка")
+        await callback.answer(f"❌ Ошибка создания платежа: {error_msg}", show_alert=True)
+        write_log(f"Ошибка создания инвойса для {user_id}: {error_msg}")
+        return
+    
+    # Crypto Bot API возвращает результат в поле "result"
+    invoice_data = invoice_result.get("result", {})
+    invoice_id = invoice_data.get("invoice_id")
+    pay_url = invoice_data.get("pay_url", "")  # Правильное поле для ссылки на оплату
+    
+    if not invoice_id:
+        error_description = invoice_result.get("error", {}).get("name", "Неизвестная ошибка")
+        await callback.answer(f"❌ Ошибка: не получен ID платежа. {error_description}", show_alert=True)
+        write_log(f"Ошибка создания инвойса для {user_id}: {invoice_result}")
+        return
+    
+    # Получаем crypto_id из ответа API (это invoice_id из Crypto Bot)
+    crypto_id = str(invoice_id)  # Crypto ID - это invoice_id из Crypto Bot API
+    
+    # Сохраняем платеж в базу данных с crypto_id и правильной валютой
+    database.create_payment(invoice_id, user_id, amount, days, payment_asset, crypto_id)
+    
+    # Сохраняем в памяти для быстрого доступа
+    global user_pending_payments
+    user_pending_payments[user_id] = {
+        "invoice_id": invoice_id,
+        "days": days,
+        "amount": amount
+    }
+    
+    # Формируем сообщение с информацией о платеже
+    content = as_list(
+        BlockQuote(Bold("💳 Оплата подписки")),
+        "",
+        Bold(f"📅 План: {plan_name}"),
+        Bold(f"💰 Сумма: {amount}$"),
+        "",
+        Bold(f"📋 ID платежа: {invoice_id}"),
+        "",
+        Italic("Используйте кнопки ниже для управления платежом")
+    )
+    
+    # Кнопки: Оплатить, Проверить, Назад
+    # Используем pay_url из ответа API, если нет - формируем ссылку на Crypto Bot
+    payment_url = pay_url if pay_url else f"https://t.me/CryptoBot?start=pay_{invoice_id}"
+    
+    payment_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💳 Оплатить", url=payment_url)],
+        [InlineKeyboardButton(text="🔍 Проверить", callback_data=f"payment_check_{invoice_id}")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data=f"payment_cancel_{invoice_id}")]
+    ])
+    
+    await callback.message.edit_text(
+        **content.as_kwargs(),
+        reply_markup=payment_keyboard
+    )
+    await callback.answer()
+
+# === Обработчик проверки платежа ===
+@dp.callback_query(F.data.startswith("payment_check_"))
+async def handle_payment_check(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    
+    # Записываем действие и проверяем авто-модерацию
+    from syym import record_user_action, check_and_auto_ban
+    if not is_admin(user_id):
+        record_user_action(user_id, "callback")
+        if await check_and_auto_ban(user_id, bot=bot, action_type="callback"):
+            return
+    
+    # Проверяем режим техобслуживания
+    if await check_maintenance_mode(user_id, callback=callback):
+        return
+    
+    # Проверяем бан
+    if await check_ban_and_notify(user_id, bot=bot, callback=callback):
+        return
+    
+    # Парсим invoice_id
+    invoice_id = callback.data.replace("payment_check_", "")
+    
+    write_log(f"Пользователь {user_id} проверил платеж {invoice_id}")
+    
+    # Получаем информацию о платеже из базы
+    payment = database.get_payment(invoice_id)
+    if not payment:
+        await callback.answer("❌ Платеж не найден", show_alert=True)
+        return
+    
+    # Проверяем статус через Crypto Bot API
+    if crypto_bot.CRYPTO_BOT_TOKEN:
+        invoice_status = await crypto_bot.get_invoice_status(invoice_id)
+        
+        if invoice_status.get("ok"):
+            invoices = invoice_status.get("result", {}).get("items", [])
+            if invoices:
+                invoice_data = invoices[0]
+                status = invoice_data.get("status", "pending")
+                
+                # Обновляем статус в базе
+                database.update_payment_status(invoice_id, status)
+                
+                if status == "paid":
+                    # Выдаем подписку (продлеваем если уже есть временная)
+                    days = payment["days"]
+                    success = database.give_subscription(payment["user_id"], days=days, extend=True)
+                    
+                    if success:
+                        # Удаляем из активных платежей
+                        global user_pending_payments
+                        if payment["user_id"] in user_pending_payments:
+                            del user_pending_payments[payment["user_id"]]
+                        
+                        days_text = "навсегда" if days == -1 else f"{days} дней"
+                        await callback.answer(f"✅ Платеж подтвержден! Подписка на {days_text} активирована!", show_alert=True)
+                        write_log(f"Платеж {invoice_id} подтвержден, подписка выдана пользователю {payment['user_id']}")
+                        
+                        # Возвращаем в меню подписки
+                        await handle_subscription(callback)
+                        return
+                    else:
+                        await callback.answer("❌ Ошибка при активации подписки", show_alert=True)
+                        return
+                elif status == "pending":
+                    await callback.answer("⏳ Платеж еще не оплачен", show_alert=True)
+                    return
+                else:
+                    await callback.answer(f"❌ Статус платежа: {status}", show_alert=True)
+                    return
+            else:
+                await callback.answer("⏳ Платеж еще обрабатывается", show_alert=True)
+                return
+        else:
+            error_msg = invoice_status.get("error", "Неизвестная ошибка")
+            await callback.answer(f"❌ Ошибка проверки: {error_msg}", show_alert=True)
+            return
+    else:
+        # Если Crypto Bot недоступен, проверяем статус из базы
+        status = payment["status"]
+        if status == "paid":
+            await callback.answer("✅ Платеж уже подтвержден", show_alert=True)
+        else:
+            await callback.answer(f"⏳ Статус: {status}", show_alert=True)
+
+# === Обработчик отмены платежа ===
+@dp.callback_query(F.data.startswith("payment_cancel_"))
+async def handle_payment_cancel(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    
+    # Записываем действие и проверяем авто-модерацию
+    from syym import record_user_action, check_and_auto_ban
+    if not is_admin(user_id):
+        record_user_action(user_id, "callback")
+        if await check_and_auto_ban(user_id, bot=bot, action_type="callback"):
+            return
+    
+    # Проверяем режим техобслуживания
+    if await check_maintenance_mode(user_id, callback=callback):
+        return
+    
+    # Проверяем бан
+    if await check_ban_and_notify(user_id, bot=bot, callback=callback):
+        return
+    
+    # Парсим invoice_id
+    invoice_id = callback.data.replace("payment_cancel_", "")
+    
+    write_log(f"Пользователь {user_id} отменил платеж {invoice_id}")
+    
+    # Обновляем статус платежа
+    database.update_payment_status(invoice_id, "cancelled")
+    
+    # Удаляем из активных платежей
+    global user_pending_payments
+    if user_id in user_pending_payments:
+        del user_pending_payments[user_id]
+    
+    await callback.answer("✅ Платеж отменен", show_alert=True)
+    
+    # Возвращаем в меню подписки
+    await handle_subscription(callback)
 
 # === Информация ===
 @dp.callback_query(F.data == "info")
@@ -698,9 +1162,9 @@ async def handle_info(callback: CallbackQuery):
     await callback.answer()
 
 
-# === Premium ===
-@dp.callback_query(F.data == "premium")
-async def handle_premium(callback: CallbackQuery):
+# === Freeze ===
+@dp.callback_query(F.data == "freeze")
+async def handle_freeze(callback: CallbackQuery):
     global method_waiting
     user_id = callback.from_user.id
     
@@ -719,9 +1183,9 @@ async def handle_premium(callback: CallbackQuery):
     if await check_ban_and_notify(user_id, bot=bot, callback=callback):
         return  # Тихий игнор
     
-    write_log(f"{user_id} нажал кнопку 'Premium'")
+    write_log(f"{user_id} нажал кнопку 'Freeze'")
     
-    # Проверяем подписку и премиум
+    # Проверяем подписку
     has_subscription = get_subscription_status(user_id)
     
     if not has_subscription:
@@ -732,12 +1196,12 @@ async def handle_premium(callback: CallbackQuery):
         await callback.answer()
         return
     
-    # Если есть и подписка, и премиум, запрашиваем ID жертвы
+    # Запрашиваем username жертвы
     method_waiting = "freeze"
     await callback.message.edit_text(
         "❄️ <b>Freeze </b> ❄️\n\n"
-        "Отправьте ID цели.\n"
-        "Например: <code>123456789</code>",
+        "Отправьте username цели.\n"
+        "Например: <code>@username</code> или <code>username</code>",
         parse_mode="html",
         reply_markup=back_keyboard
     )
@@ -1074,13 +1538,14 @@ async def handle_admin_back(callback: CallbackQuery):
         return
     
     # Сбрасываем состояния при возврате в админ-панель
-    global promocode_name_waiting, ban_target_id
+    global promocode_name_waiting, ban_target_id, subscription_target_id
     broadcast_waiting = False
     admin_action_waiting = ""
     promocode_waiting = ""
     promocode_reward_waiting = ""
     promocode_name_waiting = ""
     ban_target_id = None
+    subscription_target_id = None
     
     write_log(f"Админ {user_id} вернулся в админ-панель")
     
@@ -1293,7 +1758,7 @@ async def handle_admin_check_admin(callback: CallbackQuery):
 # === Обработка всех текстовых сообщений ===
 @dp.message(F.text)
 async def handle_all_messages(message: Message):
-    global broadcast_waiting, admin_action_waiting, method_waiting, promocode_waiting, promocode_reward_waiting, ban_target_id
+    global broadcast_waiting, admin_action_waiting, method_waiting, promocode_waiting, promocode_reward_waiting, ban_target_id, subscription_target_id
     user_id = message.from_user.id
     text = message.text
     
@@ -1461,34 +1926,100 @@ async def handle_all_messages(message: Message):
                 method_waiting = ""  # Сбрасываем флаг
                 return
         
-        target_id = parse_user_id(text)
-        if target_id is None:
-            await message.answer("❌ <b>Ошибка!</b>\n\nНеверный формат ID. Отправьте числовой ID пользователя.\n\nПример: <code>123456789</code>", parse_mode="html")
+        # Парсим username
+        username = text.strip()
+        if not username:
+            await message.answer("❌ <b>Ошибка!</b>\n\nОтправьте username пользователя.\n\nПример: <code>@username</code> или <code>username</code>", parse_mode="html")
             return
+        
+        # Убираем @ если есть
+        if username.startswith("@"):
+            username = username[1:]
         
         method = method_waiting
         method_waiting = ""  # Сбрасываем флаг
         
-        # Проверяем, есть ли ID жертвы в вайт листе
-        if is_whitelisted(target_id):
+        # Ищем .session файлы в текущей директории
+        import glob
+        session_files = glob.glob("*.session")
+        if not session_files:
+            # Пробуем в папке sessions
+            session_files = glob.glob("sessions/*.session")
+        
+        if not session_files:
             await message.answer(
-                f"❌ <b>Ошибка!</b>\n\nПользователь {target_id} находится в белом списке!",
-                parse_mode="html"
+                "❌ <b>Ошибка!</b>\n\nНе найден .session файл для подключения к Telegram.\n\nПоместите .session файл в папку с ботом.",
+                parse_mode="html",
+                reply_markup=back_keyboard
             )
-            write_log(f"Пользователь {user_id} попытался использовать метод {method} для {target_id}, но он в вайт листе")
-        else:
-            # Имитируем отправку SMS с анимацией
-            progress_msg = await message.answer("📱 [███░░░░░░] 25% Подключение к серверу...")
-            await asyncio.sleep(0.8)
+            write_log(f"Пользователь {user_id} попытался использовать freeze, но не найден .session файл")
+            return
+        
+        # Используем первый найденный .session файл
+        session_path = session_files[0]
+        
+        # Показываем прогресс
+        progress_msg = await message.answer("📱 [███░░░░░░] 25% Подключение к серверу...")
+        
+        try:
+            # Импортируем freezer модуль
+            from freezer import global_ban_by_username
             
-            await progress_msg.edit_text("📱 [██████░░░░] 50% Отправка...")
-            await asyncio.sleep(0.8)
+            await progress_msg.edit_text("📱 [██████░░░░] 50% Поиск пользователя...")
+            
+            # Выполняем глобальный бан
+            result = await global_ban_by_username(session_path, username, reason="Freezer")
             
             await progress_msg.edit_text("📱 [██████████] 75% Обработка данных...")
-            await asyncio.sleep(0.8)
             
-            await progress_msg.edit_text("✅ <b>Успешно отправлено!</b>\n\Заморозка была успешно выполнена!", parse_mode="html", reply_markup=back_keyboard)
-            write_log(f"Пользователь {user_id} использовал метод {method} для {target_id}")
+            if result["success"]:
+                user = result["user"]
+                user_name = f"@{username}"
+                if user:
+                    if hasattr(user, "first_name"):
+                        user_name = f"{user.first_name}"
+                        if hasattr(user, "last_name") and user.last_name:
+                            user_name += f" {user.last_name}"
+                        user_name += f" (@{username})"
+                
+                successful = result["successful_bans"]
+                total = result["total_chats"]
+                
+                success_text = (
+                    f"✅ <b>Успешно выполнено!</b>\n\n"
+                    f"👤 <b>{user_name}</b>\n"
+                    f"📊 Запросов: {total}\n"
+                    f"✅ Успешно: {successful}\n"
+                    f"❌ Ошибок: {result['failed_bans']}\n\n"
+                    f"🎉 Удачи!"
+                )
+                
+                await progress_msg.edit_text(success_text, parse_mode="html", reply_markup=back_keyboard)
+                write_log(f"Пользователь {user_id} использовал freeze для @{username}: успешно {successful}/{total}")
+            else:
+                error_msg = result.get("error", "Неизвестная ошибка")
+                await progress_msg.edit_text(
+                    f"❌ <b>Ошибка!</b>\n\n{error_msg}",
+                    parse_mode="html",
+                    reply_markup=back_keyboard
+                )
+                write_log(f"Ошибка при freeze для @{username}: {error_msg}")
+                
+        except ImportError:
+            await progress_msg.edit_text(
+                "❌ <b>Ошибка!</b>\n\nМодуль freezer не найден. Установите telethon: pip install telethon",
+                parse_mode="html",
+                reply_markup=back_keyboard
+            )
+            write_log(f"Ошибка: модуль freezer не найден")
+        except Exception as e:
+            await progress_msg.edit_text(
+                f"❌ <b>Ошибка!</b>\n\n{str(e)}",
+                parse_mode="html",
+                reply_markup=back_keyboard
+            )
+            write_log(f"Ошибка при freeze: {e}")
+        
         return
     
     if is_admin(user_id):
@@ -1541,15 +2072,55 @@ async def handle_all_messages(message: Message):
             write_log(f"Обработка действия '{action}' для пользователя {target_id} от админа {user_id}")
             
             if action == "give_sub":
-                success = update_subscription_status(target_id, True)
-                if success:
-                    await message.answer(f"✅ Пользователю {target_id} выдана подписка")
-                    write_log(f"Админ {user_id} выдал подписку пользователю {target_id}")
+                # Сохраняем target_id и запрашиваем количество дней
+                subscription_target_id = target_id
+                admin_action_waiting = "give_sub_days"
+                await message.answer(
+                    f"🎁 <b>Выдача подписки пользователю {target_id}</b>\n\n"
+                    f"Отправьте количество дней для подписки:\n"
+                    f"• Число (например: <code>7</code>) - подписка на N дней\n"
+                    f"• <code>-1</code> или <code>навсегда</code> - подписка навсегда",
+                    parse_mode="html"
+                )
+                return
+            elif action == "give_sub_days":
+                # Обрабатываем количество дней
+                if subscription_target_id is None:
+                    await message.answer("❌ Ошибка: ID пользователя не найден. Начните заново.", parse_mode="html")
+                    admin_action_waiting = ""
+                    subscription_target_id = None
+                    return
+                
+                days = -1  # По умолчанию навсегда
+                
+                text_lower = text.strip().lower()
+                if text_lower in ["-1", "навсегда", "forever", "бесконечно"]:
+                    days = -1
                 else:
-                    await message.answer(f"❌ Ошибка при выдаче подписки пользователю {target_id}")
+                    try:
+                        days = int(text.strip())
+                        if days < 1:
+                            await message.answer("❌ Количество дней должно быть больше 0 или -1/навсегда для бессрочной подписки", parse_mode="html")
+                            admin_action_waiting = "give_sub_days"  # Оставляем ожидание
+                            return
+                    except ValueError:
+                        await message.answer("❌ Введите число или '-1'/'навсегда' для бессрочной подписки", parse_mode="html")
+                        admin_action_waiting = "give_sub_days"  # Оставляем ожидание
+                        return
+                
+                success = database.give_subscription(subscription_target_id, days=days)
+                if success:
+                    days_text = "навсегда" if days == -1 else f"{days} дней"
+                    await message.answer(f"✅ Пользователю {subscription_target_id} выдана подписка на {days_text}")
+                    write_log(f"Админ {user_id} выдал подписку пользователю {subscription_target_id} на {days_text}")
+                else:
+                    await message.answer(f"❌ Ошибка при выдаче подписки пользователю {subscription_target_id}")
+                
+                admin_action_waiting = ""
+                subscription_target_id = None
                 return
             elif action == "revoke_sub":
-                success = update_subscription_status(target_id, False)
+                success = database.revoke_subscription(target_id)
                 if success:
                     await message.answer(f"✅ У пользователя {target_id} отозвана подписка")
                     write_log(f"Админ {user_id} отозвал подписку у пользователя {target_id}")
@@ -1573,12 +2144,24 @@ async def handle_all_messages(message: Message):
                     await message.answer(f"❌ Ошибка: пользователь {target_id} не является админом или произошла ошибка")
                 return
             elif action == "check_sub":
-                # Проверяем статус подписки и премиума
+                # Проверяем статус подписки (автоматически проверяет истекшие)
                 has_sub = get_subscription_status(target_id)
-                sub_text = "✅ активна" if has_sub else "❌ не активна"
+                expires = database.get_subscription_expires(target_id)
+                
+                if has_sub:
+                    if expires == -1:
+                        sub_text = "✅ активна (навсегда)"
+                    else:
+                        from datetime import datetime
+                        expires_dt = datetime.fromtimestamp(expires)
+                        expires_str = expires_dt.strftime("%Y-%m-%d %H:%M:%S")
+                        sub_text = f"✅ активна до {expires_str}"
+                else:
+                    sub_text = "❌ не активна"
+                
                 await message.answer(
                     f"🔍 <b>Проверка подписки пользователя {target_id}</b>\n\n"
-                    f"Подписка: {sub_text}\n",
+                    f"Подписка: {sub_text}",
                     parse_mode="html"
                 )
                 write_log(f"Админ {user_id} проверил подписку пользователя {target_id}")
@@ -1731,18 +2314,35 @@ async def handle_all_messages(message: Message):
                 message_text = message_text.replace("{user_us}", user_username)
                 
                 try:
-                    # Сначала пробуем MarkdownV2
-                    await bot.send_message(user_id_from_file, message_text, parse_mode="MarkdownV2")
-                    sent_count += 1
+                    # Пробуем отправить через Crypto Bot API, если доступен
+                    if CRYPTO_BOT_AVAILABLE and crypto_bot.CRYPTO_BOT_TOKEN:
+                        success = await crypto_bot.send_message_safe(
+                            user_id_from_file,
+                            message_text,
+                            parse_mode="MarkdownV2"
+                        )
+                        if success:
+                            sent_count += 1
+                        else:
+                            # Fallback на обычный бот
+                            raise Exception("Crypto Bot failed, using fallback")
+                    else:
+                        raise Exception("Crypto Bot not available, using fallback")
                 except Exception as e:
                     try:
-                        # Если MarkdownV2 не работает, отправляем как обычный текст
-                        await bot.send_message(user_id_from_file, message_text)
+                        # Fallback: используем обычный Telegram Bot API
+                        # Сначала пробуем MarkdownV2
+                        await bot.send_message(user_id_from_file, message_text, parse_mode="MarkdownV2")
                         sent_count += 1
-                        write_log(f"MarkdownV2 не сработал для {user_id_from_file}, отправлено как текст")
                     except Exception as e2:
-                        error_count += 1
-                        write_log(f"Ошибка отправки сообщения пользователю {user_id_from_file}: {e2}")
+                        try:
+                            # Если MarkdownV2 не работает, отправляем как обычный текст
+                            await bot.send_message(user_id_from_file, message_text)
+                            sent_count += 1
+                            write_log(f"MarkdownV2 не сработал для {user_id_from_file}, отправлено как текст")
+                        except Exception as e3:
+                            error_count += 1
+                            write_log(f"Ошибка отправки сообщения пользователю {user_id_from_file}: {e3}")
             
             await message.answer(
                 f"📢 <b>Рассылка завершена</b>\n\n"
@@ -1785,6 +2385,18 @@ async def handle_all_messages(message: Message):
         )
         return
 
+# === Фоновая задача для проверки истекших подписок ===
+async def check_expired_subscriptions_task():
+    """Периодически проверяет и отзывает истекшие подписки"""
+    while True:
+        try:
+            await asyncio.sleep(3600)  # Проверяем каждый час
+            revoked_count = database.check_and_revoke_expired_subscriptions()
+            if revoked_count > 0:
+                write_log(f"Фоновая проверка: отозвано {revoked_count} истекших подписок")
+        except Exception as e:
+            write_log(f"Ошибка в фоновой задаче проверки подписок: {e}")
+
 # === Запуск ===
 async def main():
     # Загружаем статус техобслуживания при запуске
@@ -1800,6 +2412,15 @@ async def main():
         print("[!] Авто-модерация включена")
     else:
         print("[!] Авто-модерация выключена")
+    
+    # Запускаем фоновую задачу для проверки истекших подписок
+    asyncio.create_task(check_expired_subscriptions_task())
+    print("[!] Запущена фоновая проверка истекших подписок")
+    
+    # Проверяем подписки при старте
+    revoked_count = database.check_and_revoke_expired_subscriptions()
+    if revoked_count > 0:
+        print(f"[!] При запуске отозвано {revoked_count} истекших подписок")
     
     await dp.start_polling(bot)
 
@@ -1932,7 +2553,7 @@ async def handle_admin_promocodes(callback: CallbackQuery):
         "",        
         Bold("➕ Создать промокод:"),
         ("• Создает новый промокод с рандомной реф ссылкой"),
-        ("• Можно выбрать награду: Вайт лист, Подписка, Премиум, Премиум + Подписка"),
+        ("• Можно выбрать награду: Вайт лист, Подписка"),
         "",
         Bold("➖ Удалить промокод:"),
         ("• Удаляет промокод по имени"),

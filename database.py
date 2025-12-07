@@ -22,12 +22,38 @@ def init_database():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
-            subscription BOOLEAN DEFAULT 0,
+            subscription_expires INTEGER DEFAULT NULL,
+            subscription_started_at INTEGER DEFAULT NULL,
             banned BOOLEAN DEFAULT 0,
             ban_reason TEXT,
             ban_notified BOOLEAN DEFAULT 0
         )
     """)
+    
+    # Миграция: добавляем поле subscription_started_at если его нет
+    try:
+        cursor.execute("PRAGMA table_info(users)")
+        columns = [column[1] for column in cursor.fetchall()]
+        if 'subscription_started_at' not in columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN subscription_started_at INTEGER DEFAULT NULL")
+            write_log("Миграция: добавлено поле subscription_started_at")
+    except Exception as e:
+        write_log(f"Ошибка при миграции subscription_started_at: {e}")
+    
+    # Миграция: если есть старое поле subscription, конвертируем его
+    try:
+        cursor.execute("PRAGMA table_info(users)")
+        columns = [column[1] for column in cursor.fetchall()]
+        if 'subscription' in columns and 'subscription_expires' not in columns:
+            # Добавляем новое поле
+            cursor.execute("ALTER TABLE users ADD COLUMN subscription_expires INTEGER DEFAULT NULL")
+            # Конвертируем старые данные: true -> NULL (навсегда), false -> NULL (нет подписки)
+            cursor.execute("UPDATE users SET subscription_expires = NULL WHERE subscription = 0")
+            cursor.execute("UPDATE users SET subscription_expires = -1 WHERE subscription = 1")
+            # Удаляем старое поле (SQLite не поддерживает DROP COLUMN, поэтому просто игнорируем)
+            write_log("Миграция: subscription -> subscription_expires выполнена")
+    except Exception as e:
+        write_log(f"Ошибка при миграции subscription: {e}")
     
     # Таблица админов
     cursor.execute("""
@@ -81,6 +107,32 @@ def init_database():
         )
     """)
     
+    # Таблица платежей
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS payments (
+            invoice_id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            amount REAL NOT NULL,
+            currency TEXT DEFAULT 'USD',
+            days INTEGER NOT NULL,
+            status TEXT DEFAULT 'pending',
+            created_at INTEGER NOT NULL,
+            paid_at INTEGER,
+            crypto_id TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(user_id)
+        )
+    """)
+    
+    # Миграция: добавляем поле crypto_id если его нет
+    try:
+        cursor.execute("PRAGMA table_info(payments)")
+        columns = [column[1] for column in cursor.fetchall()]
+        if 'crypto_id' not in columns:
+            cursor.execute("ALTER TABLE payments ADD COLUMN crypto_id TEXT")
+            write_log("Миграция: добавлено поле crypto_id в таблицу payments")
+    except Exception as e:
+        write_log(f"Ошибка при миграции crypto_id: {e}")
+    
     conn.commit()
     conn.close()
 
@@ -91,7 +143,7 @@ def add_user(user_id: int) -> bool:
     cursor = conn.cursor()
     
     try:
-        cursor.execute("INSERT INTO users (user_id, subscription, banned) VALUES (?, 0, 0, 0)", (user_id,))
+        cursor.execute("INSERT INTO users (user_id, subscription_expires, banned) VALUES (?, NULL, 0)", (user_id,))
         conn.commit()
         write_log(f"Добавлен новый пользователь {user_id}")
         return True
@@ -125,35 +177,224 @@ def is_banned(user_id: int) -> bool:
     return result is not None
 
 def get_subscription_status(user_id: int) -> bool:
-    """Возвращает статус подписки пользователя"""
+    """Возвращает статус подписки пользователя (активна ли сейчас).
+    Автоматически проверяет и отзывает истекшие подписки"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    cursor.execute("SELECT subscription FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT subscription_expires, subscription_started_at FROM users WHERE user_id = ?", (user_id,))
     result = cursor.fetchone()
     conn.close()
-    return result[0] == 1 if result else False
+    
+    if not result or result[0] is None:
+        return False
+    
+    expires = result[0]
+    started_at = result[1]
+    
+    # -1 означает подписка навсегда
+    if expires == -1:
+        return True
+    
+    # Проверяем валидность timestamp (должен быть разумным значением)
+    # Максимальный валидный timestamp для 2100 года примерно 4102444800
+    # Если значение больше этого или меньше 0 (кроме -1), считаем некорректным
+    MAX_VALID_TIMESTAMP = 4102444800  # Примерно 2100-01-01
+    
+    if expires is None or expires <= 0 or expires > MAX_VALID_TIMESTAMP:
+        # Некорректное значение - отзываем подписку
+        revoke_subscription(user_id)
+        write_log(f"Подписка пользователя {user_id} отозвана из-за некорректного значения expires: {expires}")
+        return False
+    
+    # Проверяем, не истекла ли подписка
+    import time
+    current_time = int(time.time())
+    
+    if expires <= current_time:
+        # Подписка истекла - автоматически отзываем
+        revoke_subscription(user_id)
+        write_log(f"Подписка пользователя {user_id} истекла и была автоматически отозвана (начало: {started_at}, истечение: {expires})")
+        return False
+    
+    return True
+
+def get_subscription_expires(user_id: int) -> Optional[int]:
+    """Возвращает время истечения подписки (Unix timestamp) или None если нет подписки, -1 если навсегда"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT subscription_expires FROM users WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    if not result or result[0] is None:
+        return None
+    
+    return result[0]
 
 
 def update_subscription_status(user_id: int, status: bool) -> bool:
-    """Обновляет статус подписки пользователя"""
+    """Обновляет статус подписки пользователя (устаревший метод, используйте give_subscription)"""
+    if status:
+        # Выдаем подписку навсегда (-1)
+        return give_subscription(user_id, days=-1)
+    else:
+        # Убираем подписку
+        return revoke_subscription(user_id)
+
+def give_subscription(user_id: int, days: int = -1, extend: bool = True) -> bool:
+    """Выдает подписку пользователю на указанное количество дней. days=-1 означает навсегда.
+    Фиксирует дату начала подписки (subscription_started_at).
+    Если extend=True и у пользователя уже есть временная подписка - продлевает её."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
     try:
-        cursor.execute("UPDATE users SET subscription = ? WHERE user_id = ?", (1 if status else 0, user_id))
+        import time
+        current_time = int(time.time())
+        
+        # Проверяем текущую подписку
+        cursor.execute("SELECT subscription_expires, subscription_started_at FROM users WHERE user_id = ?", (user_id,))
+        result = cursor.fetchone()
+        
+        if result and result[0] is not None:
+            current_expires = result[0]
+            current_started_at = result[1]
+            
+            # Если подписка навсегда (-1), не продлеваем
+            if current_expires == -1:
+                # Подписка навсегда уже есть
+                conn.close()
+                return False  # Возвращаем False чтобы показать что подписка уже есть
+            
+            # Если есть временная подписка и она еще не истекла
+            if current_expires > current_time and extend:
+                # Продлеваем подписку - добавляем дни к текущей дате истечения
+                if days == -1:
+                    # Покупаем навсегда - заменяем временную
+                    expires = -1
+                    started_at = current_time
+                else:
+                    # Продлеваем временную подписку
+                    expires = current_expires + (days * 24 * 60 * 60)
+                    started_at = current_started_at if current_started_at else current_time
+            else:
+                # Подписка истекла или extend=False - выдаем новую
+                if days == -1:
+                    expires = -1
+                else:
+                    expires = current_time + (days * 24 * 60 * 60)
+                started_at = current_time
+        else:
+            # Подписки нет - выдаем новую
+            if days == -1:
+                expires = -1
+            else:
+                expires = current_time + (days * 24 * 60 * 60)
+            started_at = current_time
+        
+        # Обновляем подписку
+        cursor.execute("""
+            UPDATE users 
+            SET subscription_expires = ?, subscription_started_at = ?
+            WHERE user_id = ?
+        """, (expires, started_at, user_id))
+        
         if cursor.rowcount == 0:
             # Пользователя нет, создаем его
-            cursor.execute("INSERT INTO users (user_id, subscription, banned) VALUES (?, ?, 0, 0)", 
-                         (user_id, 1 if status else 0))
+            cursor.execute("""
+                INSERT INTO users (user_id, subscription_expires, subscription_started_at, banned) 
+                VALUES (?, ?, ?, 0)
+            """, (user_id, expires, started_at))
+        
         conn.commit()
-        write_log(f"Обновлен статус подписки для {user_id}: {status}")
+        days_text = "навсегда" if days == -1 else f"{days} дней"
+        action_text = "продлена" if (result and result[0] is not None and result[0] > current_time and extend) else "выдана"
+        write_log(f"Подписка пользователю {user_id} {action_text} на {days_text} (начало: {started_at}, истечение: {expires})")
         return True
     except Exception as e:
-        write_log(f"Ошибка при обновлении подписки для {user_id}: {e}")
+        write_log(f"Ошибка при выдаче подписки пользователю {user_id}: {e}")
         return False
     finally:
         conn.close()
+
+def revoke_subscription(user_id: int) -> bool:
+    """Отзывает подписку у пользователя (сбрасывает и expires, и started_at)"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            UPDATE users 
+            SET subscription_expires = NULL, subscription_started_at = NULL 
+            WHERE user_id = ?
+        """, (user_id,))
+        conn.commit()
+        write_log(f"Отозвана подписка у пользователя {user_id}")
+        return True
+    except Exception as e:
+        write_log(f"Ошибка при отзыве подписки у пользователя {user_id}: {e}")
+        return False
+    finally:
+        conn.close()
+
+def check_and_revoke_expired_subscriptions() -> int:
+    """Проверяет все подписки и автоматически отзывает истекшие.
+    Возвращает количество отозванных подписок"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        import time
+        current_time = int(time.time())
+        
+        # Находим все истекшие подписки (исключая навсегда -1)
+        cursor.execute("""
+            SELECT user_id, subscription_expires, subscription_started_at 
+            FROM users 
+            WHERE subscription_expires IS NOT NULL 
+            AND subscription_expires != -1 
+            AND subscription_expires <= ?
+        """, (current_time,))
+        
+        expired_subscriptions = cursor.fetchall()
+        revoked_count = 0
+        
+        for user_id, expires, started_at in expired_subscriptions:
+            # Отзываем подписку
+            cursor.execute("""
+                UPDATE users 
+                SET subscription_expires = NULL, subscription_started_at = NULL 
+                WHERE user_id = ?
+            """, (user_id,))
+            revoked_count += 1
+            write_log(f"Автоматически отозвана истекшая подписка у пользователя {user_id} (начало: {started_at}, истечение: {expires})")
+        
+        conn.commit()
+        if revoked_count > 0:
+            write_log(f"Проверка подписок: отозвано {revoked_count} истекших подписок")
+        
+        return revoked_count
+    except Exception as e:
+        write_log(f"Ошибка при проверке истекших подписок: {e}")
+        return 0
+    finally:
+        conn.close()
+
+def get_subscription_started_at(user_id: int) -> Optional[int]:
+    """Возвращает дату начала подписки (Unix timestamp) или None"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT subscription_started_at FROM users WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    if not result or result[0] is None:
+        return None
+    
+    return result[0]
 
 
 def update_ban_status(user_id: int, status: bool, reason: Optional[str] = None) -> bool:
@@ -180,8 +421,8 @@ def update_ban_status(user_id: int, status: bool, reason: Optional[str] = None) 
             cursor.execute("DELETE FROM banned_users WHERE user_id = ?", (user_id,))
             # Восстанавливаем пользователя с базовыми настройками
             cursor.execute("""
-                INSERT OR REPLACE INTO users (user_id, subscription, banned, ban_reason, ban_notified)
-                VALUES (?, 0, 0, 0, NULL, 0)
+                INSERT OR REPLACE INTO users (user_id, subscription_expires, banned, ban_reason, ban_notified)
+                VALUES (?, NULL, 0, NULL, 0)
             """, (user_id,))
             write_log(f"Пользователь {user_id} разбанен и восстановлен в users")
         
@@ -234,7 +475,11 @@ def unmark_ban_notified(user_id: int):
 # === Функции для работы с админами ===
 def load_admins() -> List[int]:
     """Загружает список админов из базы данных"""
-    admins = [ADMIN_ID]  # Главный админ из конфига
+    # ADMIN_ID может быть списком или одним ID
+    if isinstance(ADMIN_ID, list):
+        admins = ADMIN_ID.copy()  # Копируем список главных админов
+    else:
+        admins = [ADMIN_ID]  # Если один админ
     
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -250,9 +495,15 @@ def load_admins() -> List[int]:
 
 def is_admin(user_id: int) -> bool:
     """Проверяет, является ли пользователь админом"""
-    if user_id == ADMIN_ID:
-        return True
+    # Проверяем главных админов из конфига
+    if isinstance(ADMIN_ID, list):
+        if user_id in ADMIN_ID:
+            return True
+    else:
+        if user_id == ADMIN_ID:
+            return True
     
+    # Проверяем админов из базы данных
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -263,8 +514,13 @@ def is_admin(user_id: int) -> bool:
 
 def add_admin(admin_id: int) -> bool:
     """Добавляет админа в базу данных. Возвращает True если добавлен, False если уже был"""
-    if admin_id == ADMIN_ID:
-        return False  # Главный админ уже есть
+    # Проверяем что это не главный админ из конфига
+    if isinstance(ADMIN_ID, list):
+        if admin_id in ADMIN_ID:
+            return False  # Главный админ уже есть
+    else:
+        if admin_id == ADMIN_ID:
+            return False  # Главный админ уже есть
     
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -284,8 +540,13 @@ def add_admin(admin_id: int) -> bool:
 
 def remove_admin(admin_id: int) -> bool:
     """Удаляет админа из базы данных. Возвращает True если удален"""
-    if admin_id == ADMIN_ID:
-        return False  # Главного админа нельзя удалить
+    # Нельзя удалить главного админа из конфига
+    if isinstance(ADMIN_ID, list):
+        if admin_id in ADMIN_ID:
+            return False  # Главного админа нельзя удалить
+    else:
+        if admin_id == ADMIN_ID:
+            return False  # Главного админа нельзя удалить
     
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -544,8 +805,14 @@ def get_statistics() -> dict:
         cursor.execute("SELECT COUNT(*) FROM promocodes")
         stats['promocodes'] = cursor.fetchone()[0]
         
-        # Количество пользователей с подпиской
-        cursor.execute("SELECT COUNT(*) FROM users WHERE subscription = 1")
+        # Количество пользователей с активной подпиской
+        import time
+        current_time = int(time.time())
+        cursor.execute("""
+            SELECT COUNT(*) FROM users 
+            WHERE subscription_expires IS NOT NULL 
+            AND (subscription_expires = -1 OR subscription_expires > ?)
+        """, (current_time,))
         stats['subscribed'] = cursor.fetchone()[0]
         
         
@@ -586,6 +853,145 @@ def clean_users_database() -> tuple[bool, int]:
         return False, 0
     finally:
         conn.close()
+
+# === Функции для работы с платежами ===
+def create_payment(invoice_id: str, user_id: int, amount: float, days: int, currency: str = "USD", crypto_id: Optional[str] = None) -> bool:
+    """Создает запись о платеже в базе данных"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        import time
+        current_time = int(time.time())
+        cursor.execute("""
+            INSERT INTO payments (invoice_id, user_id, amount, currency, days, status, created_at, crypto_id)
+            VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)
+        """, (invoice_id, user_id, amount, currency, days, current_time, crypto_id))
+        conn.commit()
+        write_log(f"Создан платеж {invoice_id} для пользователя {user_id}: {amount} {currency} за {days} дней")
+        return True
+    except Exception as e:
+        write_log(f"Ошибка при создании платежа {invoice_id}: {e}")
+        return False
+    finally:
+        conn.close()
+
+def update_payment_status(invoice_id: str, status: str) -> bool:
+    """Обновляет статус платежа"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        import time
+        paid_at = int(time.time()) if status == "paid" else None
+        if paid_at:
+            cursor.execute("""
+                UPDATE payments 
+                SET status = ?, paid_at = ?
+                WHERE invoice_id = ?
+            """, (status, paid_at, invoice_id))
+        else:
+            cursor.execute("""
+                UPDATE payments 
+                SET status = ?
+                WHERE invoice_id = ?
+            """, (status, invoice_id))
+        conn.commit()
+        write_log(f"Обновлен статус платежа {invoice_id}: {status}")
+        return True
+    except Exception as e:
+        write_log(f"Ошибка при обновлении статуса платежа {invoice_id}: {e}")
+        return False
+    finally:
+        conn.close()
+
+def get_payment(invoice_id: str) -> Optional[Dict]:
+    """Получает информацию о платеже"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT invoice_id, user_id, amount, currency, days, status, created_at, paid_at, crypto_id
+        FROM payments WHERE invoice_id = ?
+    """, (invoice_id,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    if not result:
+        return None
+    
+    return {
+        "invoice_id": result[0],
+        "user_id": result[1],
+        "amount": result[2],
+        "currency": result[3],
+        "days": result[4],
+        "status": result[5],
+        "created_at": result[6],
+        "paid_at": result[7],
+        "crypto_id": result[8] if len(result) > 8 else None
+    }
+
+def get_user_pending_payment(user_id: int) -> Optional[Dict]:
+    """Получает активный платеж пользователя"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT invoice_id, user_id, amount, currency, days, status, created_at, paid_at, crypto_id
+        FROM payments 
+        WHERE user_id = ? AND status = 'pending'
+        ORDER BY created_at DESC
+        LIMIT 1
+    """, (user_id,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    if not result:
+        return None
+    
+    return {
+        "invoice_id": result[0],
+        "user_id": result[1],
+        "amount": result[2],
+        "currency": result[3],
+        "days": result[4],
+        "status": result[5],
+        "created_at": result[6],
+        "paid_at": result[7],
+        "crypto_id": result[8] if len(result) > 8 else None
+    }
+
+def get_payments_history(limit: int = 50) -> List[Dict]:
+    """Получает историю платежей, отсортированную по дате создания (новые первые)"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT invoice_id, user_id, amount, currency, days, status, created_at, paid_at, crypto_id
+        FROM payments 
+        ORDER BY created_at DESC
+        LIMIT ?
+    """, (limit,))
+    
+    results = cursor.fetchall()
+    conn.close()
+    
+    payments = []
+    for row in results:
+        payments.append({
+            "invoice_id": row[0],
+            "user_id": row[1],
+            "amount": row[2],
+            "currency": row[3],
+            "days": row[4],
+            "status": row[5],
+            "created_at": row[6],
+            "paid_at": row[7],
+            "crypto_id": row[8] if len(row) > 8 else None
+        })
+    
+    return payments
 
 # === Функция логирования ===
 # Будет переопределена при импорте из syym.py

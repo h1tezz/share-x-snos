@@ -192,6 +192,111 @@ is_admin = database.is_admin
 add_admin = database.add_admin
 remove_admin = database.remove_admin
 
+# === Проверка наличия username бота в описании профиля ===
+async def check_bot_username_in_bio(user_id: int, bot_instance) -> bool:
+    """
+    Проверяет, есть ли username бота в описании профиля пользователя.
+    Возвращает True если username найден, False если нет.
+    
+    Примечание: Telegram Bot API не позволяет напрямую получить bio пользователя.
+    Используется альтернативный метод - проверка через get_chat (может не работать для всех пользователей).
+    """
+    try:
+        # Получаем информацию о боте
+        bot_info = await bot_instance.get_me()
+        bot_username = bot_info.username
+        if not bot_username:
+            # Если у бота нет username, пропускаем проверку
+            write_log(f"У бота нет username, пропускаем проверку bio для {user_id}")
+            return True
+        
+        bot_username_lower = bot_username.lower()
+        bot_mention = f"@{bot_username_lower}"
+        
+        # Пытаемся получить информацию о пользователе через get_chat
+        # Это может не работать для всех пользователей, но попробуем
+        try:
+            user_chat = await bot_instance.get_chat(user_id)
+            
+            # Проверяем bio если доступно (обычно недоступно через Bot API)
+            if hasattr(user_chat, 'bio') and user_chat.bio:
+                bio_lower = user_chat.bio.lower()
+                if bot_username_lower in bio_lower or bot_mention in bio_lower:
+                    write_log(f"Username бота найден в bio пользователя {user_id}")
+                    return True
+            
+            # Проверяем описание (description) если доступно
+            if hasattr(user_chat, 'description') and user_chat.description:
+                desc_lower = user_chat.description.lower()
+                if bot_username_lower in desc_lower or bot_mention in desc_lower:
+                    write_log(f"Username бота найден в описании пользователя {user_id}")
+                    return True
+            
+            # Проверяем username пользователя (на случай если там упоминается бот)
+            if hasattr(user_chat, 'username') and user_chat.username:
+                username_lower = user_chat.username.lower()
+                # Это не то что нужно, но оставим для полноты
+                pass
+                
+        except Exception as e:
+            # Если не удалось получить информацию через get_chat
+            # Это нормально для обычных пользователей, так как Bot API не позволяет получить bio
+            write_log(f"Не удалось получить bio для {user_id} через Bot API (это нормально): {e}")
+            # Возвращаем False, чтобы требовать от пользователя добавить бота в описание
+            return False
+        
+        # Если bio недоступно или пустое, возвращаем False
+        # Пользователь должен добавить username бота в описание профиля
+        return False
+        
+    except Exception as e:
+        write_log(f"Ошибка при проверке bot username в bio для {user_id}: {e}")
+        return False
+
+async def check_and_notify_bot_username(user_id: int, bot_instance, message=None, callback=None) -> bool:
+    """
+    Проверяет наличие username бота в описании профиля.
+    Если нет - отправляет сообщение об ошибке.
+    Возвращает True если проверка не прошла (нужно прервать выполнение), False если все ОК.
+    """
+    # Админы пропускают проверку
+    if is_admin(user_id):
+        return False
+    
+    # Проверяем наличие username бота в bio
+    has_bot_username = await check_bot_username_in_bio(user_id, bot_instance)
+    
+    if not has_bot_username:
+        error_text = (
+            "❌ <b>Ошибка доступа!</b>\n\n"
+            "Для использования бота необходимо добавить username бота в описание вашего профиля Telegram.\n\n"
+            "📝 <b>Как это сделать:</b>\n"
+            "1. Откройте настройки Telegram\n"
+            "2. Перейдите в 'Редактировать профиль'\n"
+            "3. Добавьте в описание (Bio) username бота\n"
+            "4. Сохраните изменения\n\n"
+            "После этого попробуйте снова."
+        )
+        
+        if callback:
+            try:
+                await callback.answer(error_text, show_alert=True)
+            except:
+                try:
+                    await callback.message.answer(error_text, parse_mode="html")
+                except:
+                    pass
+        elif message:
+            try:
+                await message.answer(error_text, parse_mode="html")
+            except:
+                pass
+        
+        write_log(f"Пользователь {user_id} попытался использовать бота без username бота в bio")
+        return True  # Прерываем выполнение
+    
+    return False  # Все ОК, продолжаем
+
 # Импортируем функции работы с пользователями из database модуля
 add_user = database.add_user
 is_banned = database.is_banned
@@ -373,8 +478,8 @@ async def handle_get_subscription(callback: CallbackQuery):
         await callback.answer("✅ У вас уже есть активная подписка!", show_alert=True)
         return
     
-    # Выдаем подписку
-    success = update_subscription_status(user_id, True)
+    # Выдаем подписку навсегда
+    success = database.give_subscription(user_id, days=-1)
     
     if success:
         await callback.answer("🎉 Подписка успешно активирована!", show_alert=True)
@@ -413,7 +518,7 @@ async def handle_remove_subscription(callback: CallbackQuery):
         return
     
     # Забираем подписку
-    success = update_subscription_status(user_id, False)
+    success = database.revoke_subscription(user_id)
     
     if success:
         await callback.answer("🗑️ Подписка успешно отозвана!", show_alert=True)
