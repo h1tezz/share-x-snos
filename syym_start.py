@@ -214,79 +214,106 @@ async def check_maintenance_mode(user_id, callback=None, message=None):
         return True
     return False
 
-@dp.message(Command("start"))
+from aiogram.filters import Command
+from aiogram.types import Message
+
+@dp.message(Command("start"))  # Команда /start
 async def start_message(message: Message):
+    # --- Обязательные переменные сразу ---
     user_id = message.from_user.id
-    user = message.from_user.username 
+    user = message.from_user.username
+
+    # Только для приватного чата
     if message.chat.type != "private":
         return
-    write_log(f"{user_id} вызвал /start")
 
+    # Если check_bot_in_bio упадёт — не крашить обработчик
+    try:
+        has_bot_in_bio = await check_bot_in_bio(bot, user_id)
+    except Exception as e:
+        write_log(f"[check_bot_in_bio error] {e}")
+        has_bot_in_bio = False
 
-    # Автомодерация
-    if not is_admin(user_id):
-        record_user_action(user_id, "command")
-        if await check_and_auto_ban(user_id, bot=bot, action_type="command"):
+    if has_bot_in_bio:
+        write_log(f"{user_id} вызвал /start")
+
+        # Автомодерация
+        if not is_admin(user_id):
+            record_user_action(user_id, "command")
+            if await check_and_auto_ban(user_id, bot=bot, action_type="command"):
+                return
+
+        # Проверяем реф (например /start ref_... )
+        command_args = message.text.split(maxsplit=1)
+        if len(command_args) > 1 and command_args[1].startswith("ref_"):
+            ref_link = command_args[1][4:]
+            success, msg, reward = activate_promocode(user_id, ref_link)
+
+            await message.answer(
+                f"🎉 {msg}" if success else f"❌ {msg}",
+                parse_mode="html"
+            )
+            write_log(f"Промокод от {user_id}: {ref_link} → {msg}")
+
+        # Техработы
+        if maintenance_mode and not is_admin(user_id):
+            await message.answer(
+                **BlockQuote(Bold("🔧 Бот сейчас находится на тех. обслуживании")).as_kwargs()
+            )
+            write_log(f"{user_id} попытался войти во время техработ")
             return
 
-    # Проверяем реф
-    command_args = message.text.split(maxsplit=1)
-    if len(command_args) > 1 and command_args[1].startswith("ref_"):
-        ref_link = command_args[1][4:]
-        success, msg, reward = activate_promocode(user_id, ref_link)
+        # Проверяем бан
+        if await check_ban_and_notify(user_id, bot=bot, message=message):
+            return
 
-        await message.answer(
-            f"🎉 {msg}" if success else f"❌ {msg}",
-            parse_mode="html"
-        )
-        write_log(f"Промокод от {user_id}: {ref_link} → {msg}")
-
-    # Техработы
-    if maintenance_mode and not is_admin(user_id):
-        await message.answer(
-            **BlockQuote(Bold("🔧 Бот сейчас находится на тех. обслуживании")).as_kwargs()
-        )
-        write_log(f"{user_id} попытался войти во время техработ")
-        return
-
-    # Проверяем бан
-    if await check_ban_and_notify(user_id, bot=bot, message=message):
-        return
-
-
-    # === Зарегистрированные ===
-    if is_registered(user_id):
-        tg_log(f"Пользователь {user_id} вызвал /start")
-        quote_text = f"Доброго времени суток, {message.from_user.full_name}!"
-
-        content = as_list(
-            Bold(quote_text),
-            "",
-            BlockQuote(Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤ"))
-        )
-
-        await bot.send_message(
-            chat_id=user_id,
-            **content.as_kwargs(),
-            reply_markup=main_keyboard
+        # === Зарегистрированные ===
+        if is_registered(user_id):
+            tg_log(f"Пользователь {user_id} вызвал /start")
+            quote_text = f"Доброго времени суток, {message.from_user.full_name}!"
+            content = as_list(
+                Bold(quote_text),
+                "",
+                BlockQuote(Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤ"))
             )
 
+            await bot.send_message(
+                chat_id=user_id,
+                **content.as_kwargs(),
+                reply_markup=main_keyboard
+            )
 
-    # === НОВЫЕ пользователи ===
+        # === НОВЫЕ пользователи ===
+        else:
+            content = as_list(
+                Bold(f"Доброго времени суток, {message.from_user.full_name}!"),
+                "",
+                BlockQuote("Мы рады приветствовать вас в официальном Telegram-боте нашего сервиса, мы специализируемся в помощи с доставкой."),
+                "",
+                Bold("Чтобы начать пользоваться всеми преимуществами нашего сервиса, пожалуйста, нажмите на кнопку ниже:")
+            )
+
+            await bot.send_message(
+                chat_id=user_id,
+                **content.as_kwargs(),
+                reply_markup=start_keyboard
+            )
+
     else:
+        # Здесь user_id уже определён (в начале), поэтому ошибки не будет
         content = as_list(
-            Bold(f"Доброго времени суток, {message.from_user.full_name}!"),
+            BlockQuote(Bold(f"❌ Отказано в доступе")),
             "",
-            BlockQuote("Мы рады приветствовать вас в официальном Telegram-боте нашего сервиса, мы специализируемся в помощи с доставкой."),
+            Bold("Для использования нашего бота необходимо поставить в описание @frigidrobot. После выполнения пропишите заного команду /start"),
             "",
-            Bold("Чтобы начать пользоваться всеми преимуществами нашего сервиса, пожалуйста, нажмите на кнопку ниже:")
+            Italic("Если все равно доступ не будет выдан обратитесь в тех. поддержку")
         )
 
         await bot.send_message(
             chat_id=user_id,
             **content.as_kwargs(),
-            reply_markup=start_keyboard
         )
+        
 
 
 
@@ -655,41 +682,62 @@ async def admin_panel_1(callback: CallbackQuery):
 @dp.message(Command("ad"))
 async def admin_panel(message: Message):
     user_id = message.from_user.id
-    if message.chat.type != "private":
-        return
-    
-    if not is_admin(user_id):
-        write_log(f"Пользователь {user_id} попытался получить доступ к админ-панели")
-        await message.answer("🌀 <b>Команда не найдена или не доступна Вам!</b>\n\n"
-            "Для перехода в меню пропишите /start",
-            parse_mode="html")
-        return
-    
-    write_log(f"Админ {user_id} открыл админ-панель")
-    tg_log(f"Админ {user_id} открыл админ-панель")
-    
     try:
-        # Получаем статистику
-        stats = database.get_statistics()
-        
-        content = as_list(
-            BlockQuote(Bold("Админ-панель")),
-            "",
-            Bold("📊 Статистика:"),
-            f"👥 Пользователей: {stats['users']}",
-            f"🚫 Забанено: {stats['banned']}",
-            f"💎 С подпиской: {stats['subscribed']}",
-            f"📝 В белом списке: {stats['whitelist']}",
-            f"🎟️ Промокодов: {stats['promocodes']}",
-            "",
-            Bold("Выберите категорию:")
-        )
-        await message.answer(**content.as_kwargs(), reply_markup=admin_keyboard)
-        write_log(f"Админ-панель успешно отправлена админу {user_id}")
+        has_bot_in_bio = await check_bot_in_bio(bot, user_id)
     except Exception as e:
-        write_log(f"Ошибка при отправке админ-панели: {e}")
-        await message.answer(f"❌ Ошибка: {e}")
+        write_log(f"[check_bot_in_bio error] {e}")
+        has_bot_in_bio = False
 
+    if has_bot_in_bio:
+        if message.chat.type != "private":
+            return
+        
+        if not is_admin(user_id):
+            write_log(f"Пользователь {user_id} попытался получить доступ к админ-панели")
+            await message.answer("🌀 <b>Команда не найдена или не доступна Вам!</b>\n\n"
+                "Для перехода в меню пропишите /start",
+                parse_mode="html")
+            return
+        
+        write_log(f"Админ {user_id} открыл админ-панель")
+        tg_log(f"Админ {user_id} открыл админ-панель")
+        
+        try:
+            # Получаем статистику
+            stats = database.get_statistics()
+            
+            content = as_list(
+                BlockQuote(Bold("Админ-панель")),
+                "",
+                Bold("📊 Статистика:"),
+                f"👥 Пользователей: {stats['users']}",
+                f"🚫 Забанено: {stats['banned']}",
+                f"💎 С подпиской: {stats['subscribed']}",
+                f"📝 В белом списке: {stats['whitelist']}",
+                f"🎟️ Промокодов: {stats['promocodes']}",
+                "",
+                Bold("Выберите категорию:")
+            )
+            await message.answer(**content.as_kwargs(), reply_markup=admin_keyboard)
+            write_log(f"Админ-панель успешно отправлена админу {user_id}")
+        except Exception as e:
+            write_log(f"Ошибка при отправке админ-панели: {e}")
+            await message.answer(f"❌ Ошибка: {e}")
+    else:
+        # Здесь user_id уже определён (в начале), поэтому ошибки не будет
+        content = as_list(
+            BlockQuote(Bold(f"❌ Отказано в доступе")),
+            "",
+            Bold("Для использования нашего бота необходимо поставить в описание @frigidrobot. После выполнения пропишите заного команду /start"),
+            "",
+            Italic("Если все равно доступ не будет выдан обратитесь в тех. поддержку")
+        )
+
+        await bot.send_message(
+            chat_id=user_id,
+            **content.as_kwargs(),
+        )        
+    
 
 # === Продолжить ===
 @dp.callback_query(F.data == "continue")
@@ -709,38 +757,59 @@ async def handle_continue(callback: CallbackQuery):
         return  # Тихий игнор
 
     # Добавляем пользователя в users.txt только после нажатия "Продолжить"
-    is_new = add_user(user_id)
-    write_log(f"Пользователь {user_id} нажал «Продолжить»")
-    tg_log(f"Пользователь {user_id} впервые зашел в бота")
-    
-    
-    # Отвечаем на callback
-    await callback.answer()
-       
     try:
-        await callback.message.delete()
-    except:
-        pass  # если удалить нельзя — игнор
-  
-    # Ждем 2 секунды
-    await asyncio.sleep(2)
-    
-    await bot.send_message(user_id, "⚡")
-        
-    # Формируем контент с цитатой и приветствием
-    quote_text = f"Доброго времени суток, {callback.from_user.full_name}!"
+        has_bot_in_bio = await check_bot_in_bio(bot, user_id)
+    except Exception as e:
+        write_log(f"[check_bot_in_bio error] {e}")
+        has_bot_in_bio = False
 
-    content = as_list(
-            Bold(quote_text),
+    if has_bot_in_bio:    
+        is_new = add_user(user_id)
+        write_log(f"Пользователь {user_id} нажал «Продолжить»")
+        tg_log(f"Пользователь {user_id} впервые зашел в бота")
+        
+        
+        # Отвечаем на callback
+        await callback.answer()
+        
+        try:
+            await callback.message.delete()
+        except:
+            pass  # если удалить нельзя — игнор
+    
+        # Ждем 2 секунды
+        await asyncio.sleep(2)
+        
+        await bot.send_message(user_id, "⚡")
+            
+        # Формируем контент с цитатой и приветствием
+        quote_text = f"Доброго времени суток, {callback.from_user.full_name}!"
+
+        content = as_list(
+                Bold(quote_text),
+                "",
+                BlockQuote(Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤ"))
+            )
+
+        await bot.send_message(
+                chat_id=user_id,
+                **content.as_kwargs(),
+                reply_markup=main_keyboard
+                )
+    else:
+        # Здесь user_id уже определён (в начале), поэтому ошибки не будет
+        content = as_list(
+            BlockQuote(Bold(f"❌ Отказано в доступе")),
             "",
-            BlockQuote(Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤ"))
+            Bold("Для использования нашего бота необходимо поставить в описание @frigidrobot. После выполнения пропишите заного команду /start"),
+            "",
+            Italic("Если все равно доступ не будет выдан обратитесь в тех. поддержку")
         )
 
-    await bot.send_message(
+        await bot.send_message(
             chat_id=user_id,
             **content.as_kwargs(),
-            reply_markup=main_keyboard
-            )
+        )    
 
 # === Профиль ===
 @dp.callback_query(F.data == "my")
@@ -1173,45 +1242,73 @@ async def handle_info(callback: CallbackQuery):
 async def handle_freeze(callback: CallbackQuery):
     global method_waiting
     user_id = callback.from_user.id
-    
-    # Записываем действие и проверяем авто-модерацию (callback)
-    from syym import record_user_action, check_and_auto_ban
-    if not is_admin(user_id):
-        record_user_action(user_id, "callback")
-        if await check_and_auto_ban(user_id, bot=bot, action_type="callback"):
+    try:
+        has_bot_in_bio = await check_bot_in_bio(bot, user_id)
+    except Exception as e:
+        write_log(f"[check_bot_in_bio error] {e}")
+        has_bot_in_bio = False
+
+    if has_bot_in_bio:
+        # Записываем действие и проверяем авто-модерацию (callback)
+        from syym import record_user_action, check_and_auto_ban
+        if not is_admin(user_id):
+            record_user_action(user_id, "callback")
+            if await check_and_auto_ban(user_id, bot=bot, action_type="callback"):
+                return  # Тихий игнор
+        
+        # Проверяем режим техобслуживания
+        if await check_maintenance_mode(user_id, callback=callback):
+            return
+        
+        # Проверяем бан и отправляем сообщение при первом обращении
+        if await check_ban_and_notify(user_id, bot=bot, callback=callback):
             return  # Тихий игнор
-    
-    # Проверяем режим техобслуживания
-    if await check_maintenance_mode(user_id, callback=callback):
-        return
-    
-    # Проверяем бан и отправляем сообщение при первом обращении
-    if await check_ban_and_notify(user_id, bot=bot, callback=callback):
-        return  # Тихий игнор
-    
-    write_log(f"{user_id} нажал кнопку 'Freeze'")
-    
-    # Проверяем подписку
-    has_subscription = get_subscription_status(user_id)
-    
-    if not has_subscription:
-        await callback.message.edit_text(
-            **BlockQuote(Bold("❌ оплати!")).as_kwargs(),
-            reply_markup=back_keyboard
+        
+        write_log(f"{user_id} нажал кнопку 'Freeze'")
+        
+        # Проверяем подписку
+        has_subscription = get_subscription_status(user_id)
+        
+        if not has_subscription:
+            content2 = as_list(
+            BlockQuote(Bold(f"❄️ Freeze")),
+            "",
+            Bold("Для использования бота приобретите подписку!"),
         )
-        await callback.answer()
-        return
-    
-    # Запрашиваем username жертвы
-    method_waiting = "freeze"
-    await callback.message.edit_text(
-        "❄️ <b>Freeze </b>\n\n"
-        "Отправьте username цели.\n"
-        "Например: <code>@username</code> или <code>username</code>",
-        parse_mode="html",
-        reply_markup=back_keyboard
-    )
-    await callback.answer()
+            await callback.message.edit_text(
+                **content2.as_kwargs(),
+            reply_markup=back_keyboard
+            )
+            await callback.answer()
+            return
+        
+        # Запрашиваем username жертвы
+        method_waiting = "freeze"
+        content1 = as_list(
+            BlockQuote(Bold(f"❄️ Freeze")),
+            "",
+            "Отправьте username цели",
+            "Например: @username или username\n",
+            Italic("❗️ Обязательно прочитайте инструкцию перед тем как пользоваться методом")
+        )
+        await callback.message.edit_text(
+            **content1.as_kwargs(),
+            reply_markup=back_keyboard
+            )
+    else:
+        # Здесь user_id уже определён (в начале), поэтому ошибки не будет
+        content = as_list(
+            BlockQuote(Bold(f"❌ Отказано в доступе")),
+            "",
+            Bold("Для использования нашего бота необходимо поставить в описание @frigidrobot. После выполнения пропишите заного команду /start"),
+            "",
+            Italic("Если все равно доступ не будет выдан обратитесь в тех. поддержку")
+        )
+
+        await bot.send_message(
+            chat_id=user_id,
+            **content.as_kwargs(),
+        )    
 
 # === Назад ===
 @dp.callback_query(F.data == "back")
@@ -1221,30 +1318,46 @@ async def handle_back(callback: CallbackQuery):
     method_waiting = ""  # Сбрасываем флаг метода при возврате
     admin_action_waiting = ""
     
-    # Записываем действие и проверяем авто-модерацию (callback)
-    from syym import record_user_action, check_and_auto_ban
-    if not is_admin(user_id):
-        record_user_action(user_id, "callback")
-        if await check_and_auto_ban(user_id, bot=bot, action_type="callback"):
+    try:
+        has_bot_in_bio = await check_bot_in_bio(bot, user_id)
+    except Exception as e:
+        write_log(f"[check_bot_in_bio error] {e}")
+        has_bot_in_bio = False
+
+    if has_bot_in_bio:
+        # Записываем действие и проверяем авто-модерацию (callback)
+        from syym import record_user_action, check_and_auto_ban
+        if not is_admin(user_id):
+            record_user_action(user_id, "callback")
+            if await check_and_auto_ban(user_id, bot=bot, action_type="callback"):
+                return  # Тихий игнор
+        
+        write_log(f"{user_id} вернулся в главное меню")
+
+        # Проверяем бан и отправляем сообщение при первом обращении
+        if await check_ban_and_notify(user_id, bot=bot, callback=callback):
             return  # Тихий игнор
-    
-    write_log(f"{user_id} вернулся в главное меню")
 
-    # Проверяем бан и отправляем сообщение при первом обращении
-    if await check_ban_and_notify(user_id, bot=bot, callback=callback):
-        return  # Тихий игнор
-
-    quote_text = f"Доброго времени суток, {callback.from_user.full_name}!"
-    
-    # Формируем контент с цитатой и приветствием
-    content = as_list(
-        Bold(f"{quote_text}"),
-        "",
-        BlockQuote(Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤ"))
-    )
-    
-    await callback.message.edit_text(**content.as_kwargs(), reply_markup=main_keyboard)
-    await callback.answer()
+        quote_text = f"Доброго времени суток, {callback.from_user.full_name}!"
+        
+        # Формируем контент с цитатой и приветствием
+        content = as_list(
+            Bold(f"{quote_text}"),
+            "",
+            BlockQuote(Bold("Выберите действие ниже:ㅤㅤㅤㅤㅤ"))
+        )
+        
+        await callback.message.edit_text(**content.as_kwargs(), reply_markup=main_keyboard)
+        await callback.answer()
+    else:
+        content = as_list(
+            BlockQuote(Bold(f"❄️ Freeze")),
+            "",
+            "Отправьте username цели",
+		
+            "",
+            Italic("Если все равно доступ не будет выдан обратитесь в тех. поддержку")
+        )    
 
 # === Рассылка ===
 @dp.callback_query(F.data == "admin_broadcast")

@@ -13,6 +13,29 @@ import database
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
+async def check_bot_in_bio(bot, user_id: int) -> bool: 
+    try:
+        bot_info = await bot.get_me()
+        bot_username = bot_info.username.lower()
+
+        user_chat = await bot.get_chat(user_id)
+        bio = (user_chat.bio or "").lower()
+
+        # Все возможные варианты ссылки 
+        patterns = [
+            f"@{bot_username}",
+            f"https://t.me/{bot_username}",
+            f"http://t.me/{bot_username}",
+            f"t.me/{bot_username}",
+            f"http://{bot_username}.t.me",
+            f"{bot_username}.t.me"
+        ]
+
+        return any(p in bio for p in patterns)
+    except Exception:
+        return False
+
+
 async def _send_log(text: str, chat_id: int, thread_id: Optional[int]):
     try:
         kwargs = {

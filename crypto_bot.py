@@ -28,18 +28,7 @@ async def send_message_via_crypto_bot(
     parse_mode: Optional[str] = None,
     reply_markup: Optional[Dict] = None
 ) -> Dict[str, Any]:
-    """
-    Отправляет сообщение пользователю через Crypto Bot API (send)
-    
-    Args:
-        user_id: ID пользователя Telegram
-        message: Текст сообщения
-        parse_mode: Режим парсинга (HTML, Markdown, MarkdownV2)
-        reply_markup: Клавиатура (InlineKeyboardMarkup в виде словаря)
-    
-    Returns:
-        Словарь с результатом запроса
-    """
+
     if not CRYPTO_BOT_TOKEN:
         return {
             "ok": False,
