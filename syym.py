@@ -9,6 +9,7 @@ import time
 from collections import defaultdict
 from config import *
 import database
+from typing import Optional
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
