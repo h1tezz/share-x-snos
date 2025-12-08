@@ -184,8 +184,14 @@ async def global_ban_by_username(session_path: str, username: str, reason: str =
     api_hash = os.getenv("TELEGRAM_API_HASH", "b18441a1ff607e10a989891a5462e627")
     
     # Имя сессии (без расширения .session)
-    session_name = os.path.splitext(os.path.basename(session_path))[0]
-    session_dir = os.path.dirname(session_path) if os.path.dirname(session_path) else "."
+    # Папка для сессий
+    session_dir = "sessions"
+
+    # Создаём папку если её нет
+    os.makedirs(session_dir, exist_ok=True)
+
+    # Имя сессии без расширения
+    session_name = os.path.splitext(os.path.basename(session_path))[0]    
     
     client = None
     try:

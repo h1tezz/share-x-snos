@@ -837,10 +837,8 @@ async def handle_subscription(callback: CallbackQuery):
     
     # Создаем клавиатуру с вариантами подписки
     subscription_plans_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📅 1 день — 1$", callback_data="sub_plan_1")],
-        [InlineKeyboardButton(text="📅 7 дней — 5$", callback_data="sub_plan_7")],
-        [InlineKeyboardButton(text="📅 30 дней — 10$", callback_data="sub_plan_30")],
-        [InlineKeyboardButton(text="♾️ Навсегда — 25$", callback_data="sub_plan_-1")],
+        [InlineKeyboardButton(text="1 день", callback_data="sub_plan_1")], [InlineKeyboardButton(text="7 дней", callback_data="sub_plan_7")],
+        [InlineKeyboardButton(text="30 дней", callback_data="sub_plan_30")], [InlineKeyboardButton(text="♾️ Навсегда", callback_data="sub_plan_-1")],
         [back_btn]
     ])
     
@@ -1959,18 +1957,18 @@ async def handle_all_messages(message: Message):
         session_path = session_files[0]
         
         # Показываем прогресс
-        progress_msg = await message.answer("📱 [███░░░░░░] 25% Подключение к серверу...")
+        progress_msg = await message.answer("📱<b> Проверяю активные сессии.</b>")
         
         try:
             # Импортируем freezer модуль
             from freezer import global_ban_by_username
             
-            await progress_msg.edit_text("📱 [██████░░░░] 50% Поиск пользователя...")
+            await progress_msg.edit_text("📱<b> Выполняю method..</b>")
             
             # Выполняем глобальный бан
             result = await global_ban_by_username(session_path, username, reason="Freezer")
             
-            await progress_msg.edit_text("📱 [██████████] 75% Обработка данных...")
+            await progress_msg.edit_text("📱<b> Почти готово...</b>")
             
             if result["success"]:
                 user = result["user"]
@@ -1986,15 +1984,14 @@ async def handle_all_messages(message: Message):
                 total = result["total_chats"]
                 
                 success_text = (
-                    f"✅ <b>Успешно выполнено!</b>\n\n"
-                    f"👤 <b>{user_name}</b>\n"
-                    f"📊 Запросов: {total}\n"
-                    f"✅ Успешно: {successful}\n"
-                    f"❌ Ошибок: {result['failed_bans']}\n\n"
-                    f"🎉 Удачи!"
+                    f"❄️ <b>Успешно выполнено!</b>\n\n"
+                    f"<b>└{user_name}</b>\n"
+                    f"<b>└Запросов: {total}</b>\n"
+                    f"<b>└Успешно: {successful}</b>\n"
+                    f"<b>└Ошибок: {result['failed_bans']}</b>"
                 )
                 
-                await progress_msg.edit_text(success_text, parse_mode="html", reply_markup=back_keyboard)
+                await progress_msg.edit_text(success_text, parse_mode="html")
                 write_log(f"Пользователь {user_id} использовал freeze для @{username}: успешно {successful}/{total}")
             else:
                 error_msg = result.get("error", "Неизвестная ошибка")
