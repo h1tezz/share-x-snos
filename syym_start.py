@@ -217,7 +217,11 @@ async def check_maintenance_mode(user_id, callback=None, message=None):
 @dp.message(Command("start"))
 async def start_message(message: Message):
     user_id = message.from_user.id
+    user = message.from_user.username 
+    if message.chat.type != "private":
+        return
     write_log(f"{user_id} вызвал /start")
+
 
     # Автомодерация
     if not is_admin(user_id):
@@ -252,6 +256,7 @@ async def start_message(message: Message):
 
     # === Зарегистрированные ===
     if is_registered(user_id):
+        tg_log(f"Пользователь {user_id} вызвал /start")
         quote_text = f"Доброго времени суток, {message.from_user.full_name}!"
 
         content = as_list(
@@ -588,6 +593,7 @@ async def clean_users_command(message: Message):
                 **BlockQuote(Bold(f"✅ База данных пользователей полностью очищена - удалено {deleted_count} пользователей")).as_kwargs(),
             )
             write_log(f"Админ {user_id} полностью очистил базу данных пользователей ({deleted_count} пользователей)")
+            tg_log(f"Админ {user_id} полностью очистил базу данных пользователей ({deleted_count} пользователей)")
         else:
             await message.answer("❌ Ошибка при очистке базы данных")
     except Exception as e:
@@ -649,8 +655,8 @@ async def admin_panel_1(callback: CallbackQuery):
 @dp.message(Command("ad"))
 async def admin_panel(message: Message):
     user_id = message.from_user.id
-    
-    write_log(f"Получена команда /ad от пользователя {user_id}")
+    if message.chat.type != "private":
+        return
     
     if not is_admin(user_id):
         write_log(f"Пользователь {user_id} попытался получить доступ к админ-панели")
@@ -660,6 +666,7 @@ async def admin_panel(message: Message):
         return
     
     write_log(f"Админ {user_id} открыл админ-панель")
+    tg_log(f"Админ {user_id} открыл админ-панель")
     
     try:
         # Получаем статистику
@@ -704,6 +711,7 @@ async def handle_continue(callback: CallbackQuery):
     # Добавляем пользователя в users.txt только после нажатия "Продолжить"
     is_new = add_user(user_id)
     write_log(f"Пользователь {user_id} нажал «Продолжить»")
+    tg_log(f"Пользователь {user_id} впервые зашел в бота")
     
     
     # Отвечаем на callback
@@ -1197,7 +1205,7 @@ async def handle_freeze(callback: CallbackQuery):
     # Запрашиваем username жертвы
     method_waiting = "freeze"
     await callback.message.edit_text(
-        "❄️ <b>Freeze </b> ❄️\n\n"
+        "❄️ <b>Freeze </b>\n\n"
         "Отправьте username цели.\n"
         "Например: <code>@username</code> или <code>username</code>",
         parse_mode="html",
@@ -1357,6 +1365,7 @@ async def handle_admin_maintenance(callback: CallbackQuery):
     
     if maintenance_mode:
         write_log(f"Админ {user_id} включил режим техобслуживания")
+        tg_log(f"Админ {user_id} включил режим техобслуживания")
         await callback.answer("🔧 Режим техобслуживания ВКЛЮЧЕН", show_alert=True)
         await callback.message.edit_text(
             "🔧 <b>Техобслуживание</b>\n\n"
@@ -1369,6 +1378,7 @@ async def handle_admin_maintenance(callback: CallbackQuery):
         )
     else:
         write_log(f"Админ {user_id} выключил режим техобслуживания")
+        tg_log(f"Админ {user_id} выключил режим техобслуживания")
         await callback.answer("✅ Режим техобслуживания ВЫКЛЮЧЕН", show_alert=True)
         await callback.message.edit_text(
             "🔧 <b>Техобслуживание</b>\n\n"
@@ -1398,6 +1408,7 @@ async def handle_admin_auto_moderation(callback: CallbackQuery):
     
     if new_status:
         write_log(f"Админ {user_id} включил авто-модерацию")
+        tg_log(f"Админ {user_id} включил авто-модерацию")
         await callback.answer("🤖 Авто-модерация ВКЛЮЧЕНА", show_alert=True)
         await callback.message.edit_text(
             "🤖 <b>Авто-модерация</b>\n\n"
@@ -1410,6 +1421,7 @@ async def handle_admin_auto_moderation(callback: CallbackQuery):
         )
     else:
         write_log(f"Админ {user_id} выключил авто-модерацию")
+        tg_log(f"Админ {user_id} выключил авто-модерацию")
         await callback.answer("❌ Авто-модерация ВЫКЛЮЧЕНА", show_alert=True)
         await callback.message.edit_text(
             "🤖 <b>Авто-модерация</b>\n\n"
@@ -1957,22 +1969,22 @@ async def handle_all_messages(message: Message):
         session_path = session_files[0]
         
         # Показываем прогресс
-        progress_msg = await message.answer("📱<b> Проверяю активные сессии.</b>")
+        progress_msg = await message.answer("📱<b> Проверяю активные сессии.</b>",parse_mode="HTML")
+        
         
         try:
             # Импортируем freezer модуль
             from freezer import global_ban_by_username
             
-            await progress_msg.edit_text("📱<b> Выполняю method..</b>")
+            await progress_msg.edit_text("📱<b> Выполняю method..</b>",parse_mode="HTML")
             
             # Выполняем глобальный бан
             result = await global_ban_by_username(session_path, username, reason="Freezer")
             
-            await progress_msg.edit_text("📱<b> Почти готово...</b>")
+            await progress_msg.edit_text("📱<b> Почти готово...</b>",parse_mode="HTML")
             
             if result["success"]:
                 user = result["user"]
-                user_name = f"@{username}"
                 if user:
                     if hasattr(user, "first_name"):
                         user_name = f"{user.first_name}"
@@ -1984,13 +1996,12 @@ async def handle_all_messages(message: Message):
                 total = result["total_chats"]
                 
                 success_text = (
-                    f"❄️ <b>Успешно выполнено!</b>\n\n"
-                    f"<b>└{user_name}</b>\n"
-                    f"<b>└Запросов: {total}</b>\n"
-                    f"<b>└Успешно: {successful}</b>\n"
-                    f"<b>└Ошибок: {result['failed_bans']}</b>"
+                    f"❄️ <b>Письмо доставлено</b>\n"
+                    f"<b>└─📂 Письмо: ❄️ Freezer (<code>{user_name}</code>)</b>\n\n"
+                    f"<b>🟢 Успешно отправлено: {successful}</b>\n"
                 )
                 
+                frlog(f"Пользователь {user_id} использовал freeze для @{username}: успешно {successful}/{total}")
                 await progress_msg.edit_text(success_text, parse_mode="html")
                 write_log(f"Пользователь {user_id} использовал freeze для @{username}: успешно {successful}/{total}")
             else:
@@ -2037,6 +2048,7 @@ async def handle_all_messages(message: Message):
             success = update_ban_status(ban_target_id, True, reason)
             if success:
                 await message.answer(f"🚫 Пользователь {ban_target_id} забанен\n\nПричина: {reason}")
+                tg_log(f"Админ {user_id} забанил пользователя {ban_target_id}, причина: {reason}")
                 write_log(f"Админ {user_id} забанил пользователя {ban_target_id}, причина: {reason}")
                 
                 # Отправляем сообщение забаненному пользователю сразу (ручной бан)
@@ -2056,7 +2068,6 @@ async def handle_all_messages(message: Message):
             return
         
         if admin_action_waiting:
-            write_log(f"Админ {user_id} отправил сообщение '{text}' при ожидании действия: {admin_action_waiting}")
             target_id = parse_user_id(text)
             if target_id is None:
                 await message.answer("❌ <b>Ошибка!</b>\n\nНеверный формат ID. Отправьте числовой ID пользователя.\n\nПример: <code>123456789</code>", parse_mode="html")
@@ -2110,6 +2121,7 @@ async def handle_all_messages(message: Message):
                     days_text = "навсегда" if days == -1 else f"{days} дней"
                     await message.answer(f"✅ Пользователю {subscription_target_id} выдана подписка на {days_text}")
                     write_log(f"Админ {user_id} выдал подписку пользователю {subscription_target_id} на {days_text}")
+                    tg_log(f"Админ {user_id} выдал подписку пользователю {subscription_target_id} на {days_text}")
                 else:
                     await message.answer(f"❌ Ошибка при выдаче подписки пользователю {subscription_target_id}")
                 
@@ -2121,6 +2133,7 @@ async def handle_all_messages(message: Message):
                 if success:
                     await message.answer(f"✅ У пользователя {target_id} отозвана подписка")
                     write_log(f"Админ {user_id} отозвал подписку у пользователя {target_id}")
+                    tg_log(f"Админ {user_id} отозвал подписку у пользователя {target_id}")
                 else:
                     await message.answer(f"❌ Ошибка при отзыве подписки у пользователя {target_id}")
                 return
@@ -2129,6 +2142,7 @@ async def handle_all_messages(message: Message):
                 if success:
                     await message.answer(f"✅ Пользователь {target_id} добавлен как админ")
                     write_log(f"Админ {user_id} добавил нового админа {target_id}")
+                    tg_log(f"Админ {user_id} добавил нового админа {target_id}")
                 else:
                     await message.answer(f"❌ Ошибка: пользователь {target_id} уже является админом или произошла ошибка")
                 return
@@ -2137,6 +2151,7 @@ async def handle_all_messages(message: Message):
                 if success:
                     await message.answer(f"✅ Пользователь {target_id} удален из админов")
                     write_log(f"Админ {user_id} удалил админа {target_id}")
+                    tg_log(f"Админ {user_id} добавил нового админа {target_id}")
                 else:
                     await message.answer(f"❌ Ошибка: пользователь {target_id} не является админом или произошла ошибка")
                 return
@@ -2195,6 +2210,7 @@ async def handle_all_messages(message: Message):
                     if success:
                         await message.answer(**BlockQuote(Bold(f"📄 Пользователь {target_id} успешно добавлен в белый список!")).as_kwargs())
                         write_log(f"Админ {user_id} добавил {target_id} в белый список")
+                        tg_log(f"Админ {user_id} добавил пользователя {target_id} в белый список")
                     else:
                         await message.answer(**BlockQuote(Bold("❌ Ошибка при добавлении пользователя в белый список")).as_kwargs())
                         write_log(f"Ошибка при добавлении {target_id} в белый список")
@@ -2204,6 +2220,7 @@ async def handle_all_messages(message: Message):
                 success = remove_from_whitelist(target_id)
                 if success:
                     await message.answer(f"✅ Пользователь {target_id} удален из белого списка")
+                    tg_log(f"Админ {user_id} удалил пользователя {target_id} из белого списка")
                     write_log(f"Админ {user_id} удалил {target_id} из белого списка")
                 else:
                     await message.answer(f"❌ Ошибка: пользователь {target_id} не найден в белом списке")
@@ -2248,6 +2265,7 @@ async def handle_all_messages(message: Message):
                 if success:
                     await message.answer(f"🚫 Пользователь {ban_target_id} забанен\n\nПричина: {reason}")
                     write_log(f"Админ {user_id} забанил пользователя {ban_target_id}, причина: {reason}")
+                    tg_log(f"Админ {user_id} забанил пользователя {ban_target_id}, причина: {reason}")
                     
                     # Отправляем сообщение забаненному пользователю сразу
                     try:
@@ -2269,6 +2287,7 @@ async def handle_all_messages(message: Message):
                 if success:
                     await message.answer(f"✅ Пользователь {target_id} разбанен")
                     write_log(f"Админ {user_id} разбанил пользователя {target_id}")
+                    tg_log(f"Админ {user_id} разбанил пользователя {target_id}")
                 else:
                     await message.answer(f"❌ Ошибка при разбане пользователя {target_id}")
                 return
@@ -2350,10 +2369,13 @@ async def handle_all_messages(message: Message):
             )
             
             write_log(f"Админ {user_id} провел рассылку: отправлено {sent_count}, ошибок {error_count}")
+            tg_log(f"Админ {user_id} провел рассылку: отправлено {sent_count}, ошибок {error_count}")
             return
     
     # Обработка неизвестных команд для всех пользователей
     if message.text.startswith('/'):
+        if message.chat.type != "private":
+            return
          # Проверяем бан - если забанен, тихо игнорируем
         if not is_admin(user_id) and is_banned(user_id):
             return  # Тихий игнор
@@ -2369,6 +2391,8 @@ async def handle_all_messages(message: Message):
     
     # Обработка любых других сообщений (не команд) для всех пользователей
     if not message.text.startswith('/'):
+        if message.chat.type != "private":
+            return
         # Проверяем бан - если забанен, тихо игнорируем
         if not is_admin(user_id) and is_banned(user_id):
             return  # Тихий игнор

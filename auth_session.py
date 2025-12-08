@@ -1,6 +1,6 @@
 """
 Скрипт для авторизации Telethon сессии для метода freezer
-Создает .session файл для использования в freezer.py
+Создает .session файл в папке sessions/ для использования в freezer.py
 """
 import asyncio
 import os
@@ -8,15 +8,16 @@ import sys
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 
+
 async def create_session():
     """Создает Telethon сессию с авторизацией"""
-    
+
     print("=" * 50)
     print("🔐 Авторизация Telethon сессии для Freezer")
     print("=" * 50)
     print()
-    
-    # Запрашиваем API ID
+
+    # --- API ID ---
     while True:
         try:
             api_id_input = input("📱 Введите API ID: ").strip()
@@ -30,37 +31,45 @@ async def create_session():
         except KeyboardInterrupt:
             print("\n\n❌ Отменено пользователем")
             sys.exit(0)
-    
-    # Запрашиваем API Hash
+
+    # --- API HASH ---
     while True:
         api_hash = input("🔑 Введите API Hash: ").strip()
         if not api_hash:
             print("❌ API Hash не может быть пустым!")
             continue
         break
-    
-    # Запрашиваем имя сессии
-    session_name = input("📝 Введите имя сессии (без .session, по умолчанию 'freezer'): ").strip()
+
+    # --- Имя сессии ---
+    session_name = input("📝 Введите имя сессии (по умолчанию: freezer): ").strip()
     if not session_name:
         session_name = "freezer"
-    
+
+    # --- Папка для сессий ---
+    session_dir = "sessions"
+    os.makedirs(session_dir, exist_ok=True)
+
+    # Полный путь к файлу сессии
+    session_path = os.path.join(session_dir, session_name)
+
     print()
     print("=" * 50)
     print(f"📋 Параметры:")
     print(f"   API ID: {api_id}")
     print(f"   API Hash: {api_hash[:10]}...")
     print(f"   Имя сессии: {session_name}")
+    print(f"   Папка: {os.path.abspath(session_dir)}")
     print("=" * 50)
     print()
-    
-    # Создаем клиент
-    client = TelegramClient(session_name, api_id, api_hash)
-    
+
+    # --- Создаем клиента Telethon ---
+    client = TelegramClient(session_path, api_id, api_hash)
+
     try:
         print("🔄 Подключение к Telegram...")
         await client.start()
-        
-        # Проверяем, авторизован ли уже
+
+        # Проверка авторизации
         if await client.is_user_authorized():
             me = await client.get_me()
             print(f"✅ Уже авторизован как: {me.first_name} (@{me.username if me.username else 'без username'})")
@@ -71,66 +80,65 @@ async def create_session():
                 await client.disconnect()
                 return
         else:
-            # Запрашиваем номер телефона
+            # --- Телефон ---
             print()
-            phone = input("📞 Введите номер телефона (с кодом страны, например +79991234567): ").strip()
+            phone = input("📞 Введите номер телефона (например +79991234567): ").strip()
             if not phone:
                 print("❌ Номер телефона не может быть пустым!")
                 await client.disconnect()
                 return
-            
+
             print(f"📤 Отправка кода на {phone}...")
             await client.send_code_request(phone)
-            
-            # Запрашиваем код
+
+            # --- Код ---
             code = input("🔢 Введите код из Telegram: ").strip()
             if not code:
                 print("❌ Код не может быть пустым!")
                 await client.disconnect()
                 return
-            
+
             try:
-                # Пытаемся войти с кодом
                 await client.sign_in(phone, code)
                 me = await client.get_me()
                 print(f"✅ Успешно авторизован как: {me.first_name} (@{me.username if me.username else 'без username'})")
             except SessionPasswordNeededError:
-                # Нужен пароль 2FA
+                # --- 2FA ---
                 password = input("🔒 Введите пароль двухфакторной аутентификации: ").strip()
                 if not password:
                     print("❌ Пароль не может быть пустым!")
                     await client.disconnect()
                     return
-                
+
                 await client.sign_in(password=password)
                 me = await client.get_me()
                 print(f"✅ Успешно авторизован как: {me.first_name} (@{me.username if me.username else 'без username'})")
-        
-        # Проверяем что сессия создана
-        session_file = f"{session_name}.session"
+
+        # --- Проверка файла сессии ---
+        session_file = f"{session_path}.session"
         if os.path.exists(session_file):
             print()
             print("=" * 50)
             print("✅ Сессия успешно создана!")
-            print(f"📁 Файл: {os.path.abspath(session_file)}")
-            print()
-            print("💡 Теперь вы можете использовать этот .session файл в freezer")
+            print(f"📁 Путь: {os.path.abspath(session_file)}")
+            print("💡 Готово! Можешь использовать этот файл в freezer.py")
             print("=" * 50)
         else:
-            print("⚠️  Файл сессии не найден, но авторизация прошла успешно")
-        
+            print("⚠️ Файл сессии не найден, но вход выполнен")
+
     except Exception as e:
         print(f"❌ Ошибка при авторизации: {e}")
         print()
         print("Проверьте:")
-        print("  - Правильность API ID и API Hash")
-        print("  - Правильность номера телефона")
-        print("  - Правильность кода подтверждения")
+        print(" - API ID и API Hash")
+        print(" - Номер телефона")
+        print(" - Код подтверждения")
     finally:
         try:
             await client.disconnect()
         except:
             pass
+
 
 if __name__ == "__main__":
     try:
@@ -138,4 +146,3 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\n\n❌ Отменено пользователем")
         sys.exit(0)
-

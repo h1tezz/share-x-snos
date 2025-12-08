@@ -13,6 +13,55 @@ import database
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
+async def _send_log(text: str, chat_id: int, thread_id: Optional[int]):
+    try:
+        kwargs = {
+            "chat_id": chat_id,
+            "text": f"<b>{text}</b>",
+            "disable_web_page_preview": True,
+            "parse_mode": "HTML"
+        }
+
+        if thread_id:
+            kwargs["message_thread_id"] = int(thread_id)
+
+        await bot.send_message(**kwargs)
+    except Exception as e:
+        print(f"[tg_log error] {e}")
+
+def tg_log(text: str, thread_id: Optional[int] = None, chat_id: Optional[int] = None):
+    LOG_CHAT_ID = -1003464522727
+    LOG_THREAD_ID_DEFAULT = 2
+
+    target_chat = chat_id if chat_id is not None else LOG_CHAT_ID
+    target_thread = thread_id if thread_id is not None else (LOG_THREAD_ID_DEFAULT or None)
+
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.create_task(_send_log(text, target_chat, target_thread))
+        else:
+            loop.run_until_complete(_send_log(text, target_chat, target_thread))
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(_send_log(text, target_chat, target_thread))
+
+def frlog(text: str, thread_id: Optional[int] = None, chat_id: Optional[int] = None):
+    LOG_CHAT_ID = -1003464522727
+    LOG_THREAD_ID_DEFAULT = 107
+
+    target_chat = chat_id if chat_id is not None else LOG_CHAT_ID
+    target_thread = thread_id if thread_id is not None else (LOG_THREAD_ID_DEFAULT or None)
+
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.create_task(_send_log(text, target_chat, target_thread))
+        else:
+            loop.run_until_complete(_send_log(text, target_chat, target_thread))
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(_send_log(text, target_chat, target_thread))        
 
 # === Кастомное логирование ===
 def write_log(text: str):
