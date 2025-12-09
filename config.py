@@ -11,6 +11,9 @@ CRYPTO_BOT_TOKEN = "497839:AAVlA8vu1ChWlEJ2cEeRMXIFOTl913Dn9Tf"  # Устано�
 CRYPTO_PAYMENT_ASSET = "USDT"  # По умолчанию USDT
 
 # === Кнопки ===
+subs = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📣 Канал", url="https://t.me/+3nWUxtPEokoxZmI0")]])
+
 continue_btn = InlineKeyboardButton(text="✈️ Продолжить", callback_data="continue")
 sub_btn = InlineKeyboardButton(text="💎 Подписка", callback_data="subscription")
 my_btn = InlineKeyboardButton(text="👤 Профиль", callback_data="my")
@@ -195,3 +198,4 @@ headers = {
     'Referer': 'https://my.telegram.org/auth',
     'X-Requested-With': 'XMLHttpRequest'
     }
+

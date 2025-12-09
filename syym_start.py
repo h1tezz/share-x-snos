@@ -229,7 +229,7 @@ async def start_message(message: Message):
 
     # Если check_bot_in_bio упадёт — не крашить обработчик
     try:
-        has_bot_in_bio = await check_bot_in_bio(bot, user_id)
+        has_bot_in_bio = await check_access(bot, user_id)
     except Exception as e:
         write_log(f"[check_bot_in_bio error] {e}")
         has_bot_in_bio = False
@@ -304,14 +304,15 @@ async def start_message(message: Message):
         content = as_list(
             BlockQuote(Bold(f"❌ Отказано в доступе")),
             "",
-            Bold("Для использования нашего бота необходимо поставить в описание @frigidrobot. После выполнения пропишите заного команду /start"),
+            Bold("Для использования нашего бота необходимо поставить в ник или описание @frigidrobot, а так же подписаться на наш канал по кнопке ниже. После выполнения пропишите заного команду /start"),
             "",
-            Italic("Если все равно доступ не будет выдан обратитесь в тех. поддержку")
+            Italic("Если все равно доступ не будет разрешён обратитесь в тех. поддержку")
         )
 
         await bot.send_message(
             chat_id=user_id,
             **content.as_kwargs(),
+            reply_markup=subs
         )
         
 
@@ -683,7 +684,7 @@ async def admin_panel_1(callback: CallbackQuery):
 async def admin_panel(message: Message):
     user_id = message.from_user.id
     try:
-        has_bot_in_bio = await check_bot_in_bio(bot, user_id)
+        has_bot_in_bio = await check_access(bot, user_id)
     except Exception as e:
         write_log(f"[check_bot_in_bio error] {e}")
         has_bot_in_bio = False
@@ -728,14 +729,15 @@ async def admin_panel(message: Message):
         content = as_list(
             BlockQuote(Bold(f"❌ Отказано в доступе")),
             "",
-            Bold("Для использования нашего бота необходимо поставить в описание @frigidrobot. После выполнения пропишите заного команду /start"),
+            Bold("Для использования нашего бота необходимо поставить в ник или описание @frigidrobot, а так же подписаться на наш канал по кнопке ниже. После выполнения пропишите заного команду /start"),
             "",
-            Italic("Если все равно доступ не будет выдан обратитесь в тех. поддержку")
+            Italic("Если все равно доступ не будет разрешён обратитесь в тех. поддержку")
         )
 
         await bot.send_message(
             chat_id=user_id,
             **content.as_kwargs(),
+            reply_markup=subs
         )        
     
 
@@ -758,7 +760,7 @@ async def handle_continue(callback: CallbackQuery):
 
     # Добавляем пользователя в users.txt только после нажатия "Продолжить"
     try:
-        has_bot_in_bio = await check_bot_in_bio(bot, user_id)
+        has_bot_in_bio = await check_access(bot, user_id)
     except Exception as e:
         write_log(f"[check_bot_in_bio error] {e}")
         has_bot_in_bio = False
@@ -801,15 +803,16 @@ async def handle_continue(callback: CallbackQuery):
         content = as_list(
             BlockQuote(Bold(f"❌ Отказано в доступе")),
             "",
-            Bold("Для использования нашего бота необходимо поставить в описание @frigidrobot. После выполнения пропишите заного команду /start"),
+            Bold("Для использования нашего бота необходимо поставить в ник или описание @frigidrobot, а так же подписаться на наш канал по кнопке ниже. После выполнения пропишите заного команду /start"),
             "",
-            Italic("Если все равно доступ не будет выдан обратитесь в тех. поддержку")
+            Italic("Если все равно доступ не будет разрешён обратитесь в тех. поддержку")
         )
 
         await bot.send_message(
             chat_id=user_id,
             **content.as_kwargs(),
-        )    
+            reply_markup=subs
+        )
 
 # === Профиль ===
 @dp.callback_query(F.data == "my")
@@ -1243,7 +1246,7 @@ async def handle_freeze(callback: CallbackQuery):
     global method_waiting
     user_id = callback.from_user.id
     try:
-        has_bot_in_bio = await check_bot_in_bio(bot, user_id)
+        has_bot_in_bio = await check_access(bot, user_id)
     except Exception as e:
         write_log(f"[check_bot_in_bio error] {e}")
         has_bot_in_bio = False
@@ -1300,15 +1303,16 @@ async def handle_freeze(callback: CallbackQuery):
         content = as_list(
             BlockQuote(Bold(f"❌ Отказано в доступе")),
             "",
-            Bold("Для использования нашего бота необходимо поставить в описание @frigidrobot. После выполнения пропишите заного команду /start"),
+            Bold("Для использования нашего бота необходимо поставить в ник или описание @frigidrobot, а так же подписаться на наш канал по кнопке ниже. После выполнения пропишите заного команду /start"),
             "",
-            Italic("Если все равно доступ не будет выдан обратитесь в тех. поддержку")
+            Italic("Если все равно доступ не будет разрешён обратитесь в тех. поддержку")
         )
 
         await bot.send_message(
             chat_id=user_id,
             **content.as_kwargs(),
-        )    
+            reply_markup=subs
+        )  
 
 # === Назад ===
 @dp.callback_query(F.data == "back")
@@ -1319,7 +1323,7 @@ async def handle_back(callback: CallbackQuery):
     admin_action_waiting = ""
     
     try:
-        has_bot_in_bio = await check_bot_in_bio(bot, user_id)
+        has_bot_in_bio = await check_access(bot, user_id)
     except Exception as e:
         write_log(f"[check_bot_in_bio error] {e}")
         has_bot_in_bio = False
@@ -1349,15 +1353,22 @@ async def handle_back(callback: CallbackQuery):
         
         await callback.message.edit_text(**content.as_kwargs(), reply_markup=main_keyboard)
         await callback.answer()
+ 
     else:
+        # Здесь user_id уже определён (в начале), поэтому ошибки не будет
         content = as_list(
-            BlockQuote(Bold(f"❄️ Freeze")),
+            BlockQuote(Bold(f"❌ Отказано в доступе")),
             "",
-            "Отправьте username цели",
-		
+            Bold("Для использования нашего бота необходимо поставить в ник или описание @frigidrobot, а так же подписаться на наш канал по кнопке ниже. После выполнения пропишите заного команду /start"),
             "",
-            Italic("Если все равно доступ не будет выдан обратитесь в тех. поддержку")
-        )    
+            Italic("Если все равно доступ не будет разрешён обратитесь в тех. поддержку")
+        )
+
+        await bot.send_message(
+            chat_id=user_id,
+            **content.as_kwargs(),
+            reply_markup=subs
+        )   
 
 # === Рассылка ===
 @dp.callback_query(F.data == "admin_broadcast")

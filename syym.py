@@ -3,6 +3,7 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from aiogram.filters import Command
 from aiogram.utils.formatting import *
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 import asyncio
 import os
 import time
@@ -14,27 +15,48 @@ from typing import Optional
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-async def check_bot_in_bio(bot, user_id: int) -> bool: 
+async def check_access(bot, user_id: int) -> bool:
     try:
+        CHANNEL_ID =  -1003383620394
+        # --- Получаем информацию о боте ---
         bot_info = await bot.get_me()
-        bot_username = bot_info.username.lower()
+        bot_username = (bot_info.username or "").lower()
 
-        user_chat = await bot.get_chat(user_id)
-        bio = (user_chat.bio or "").lower()
+        # --- Получаем данные пользователя ---
+        user = await bot.get_chat(user_id)
 
-        # Все возможные варианты ссылки 
+        bio = (user.bio or "").lower()
+        first_name = (user.first_name or "").lower()
+        last_name = (user.last_name or "").lower()
+        username = (user.username or "").lower()
+
+        # --- Проверка упоминания бота ---
         patterns = [
             f"@{bot_username}",
             f"https://t.me/{bot_username}",
             f"http://t.me/{bot_username}",
             f"t.me/{bot_username}",
             f"http://{bot_username}.t.me",
-            f"{bot_username}.t.me"
+            f"{bot_username}.t.me",
+            bot_username
         ]
 
-        return any(p in bio for p in patterns)
+        text_to_check = " ".join([bio, first_name, last_name, username])
+        bot_mentioned = any(p in text_to_check for p in patterns)
+
+        # --- Проверка подписки на канал ---
+        try:
+            member = await bot.get_chat_member(CHANNEL_ID, user_id)
+            subscribed = member.status in ("member", "administrator", "creator")
+        except (TelegramBadRequest, TelegramForbiddenError):
+            subscribed = False
+
+        # --- Итоговая проверка ---
+        return bot_mentioned and subscribed
+
     except Exception:
         return False
+
 
 
 async def _send_log(text: str, chat_id: int, thread_id: Optional[int]):
