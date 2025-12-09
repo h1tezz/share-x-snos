@@ -229,7 +229,7 @@ async def start_message(message: Message):
 
     # Если check_bot_in_bio упадёт — не крашить обработчик
     try:
-        has_bot_in_bio = await check_access(bot, user_id)
+        has_bot_in_bio = await check(bot, user_id)
     except Exception as e:
         write_log(f"[check_bot_in_bio error] {e}")
         has_bot_in_bio = False
@@ -304,7 +304,9 @@ async def start_message(message: Message):
         content = as_list(
             BlockQuote(Bold(f"❌ Отказано в доступе")),
             "",
-            Bold("Для использования нашего бота необходимо поставить в ник или описание @frigidrobot, а так же подписаться на наш канал по кнопке ниже. После выполнения пропишите заного команду /start"),
+            Bold("Как получить доступ?"),
+            Bold("• Установите в ник / описание @frigidrobot"),
+            Bold("• Подпишитесь на наш канал по кнопке ниже"),
             "",
             Italic("Если все равно доступ не будет разрешён обратитесь в тех. поддержку")
         )
@@ -684,7 +686,7 @@ async def admin_panel_1(callback: CallbackQuery):
 async def admin_panel(message: Message):
     user_id = message.from_user.id
     try:
-        has_bot_in_bio = await check_access(bot, user_id)
+        has_bot_in_bio = await check(bot, user_id)
     except Exception as e:
         write_log(f"[check_bot_in_bio error] {e}")
         has_bot_in_bio = False
@@ -729,7 +731,9 @@ async def admin_panel(message: Message):
         content = as_list(
             BlockQuote(Bold(f"❌ Отказано в доступе")),
             "",
-            Bold("Для использования нашего бота необходимо поставить в ник или описание @frigidrobot, а так же подписаться на наш канал по кнопке ниже. После выполнения пропишите заного команду /start"),
+            Bold("Как получить доступ?"),
+            Bold("• Установите в ник / описание @frigidrobot"),
+            Bold("• Подпишитесь на наш канал по кнопке ниже"),
             "",
             Italic("Если все равно доступ не будет разрешён обратитесь в тех. поддержку")
         )
@@ -760,7 +764,7 @@ async def handle_continue(callback: CallbackQuery):
 
     # Добавляем пользователя в users.txt только после нажатия "Продолжить"
     try:
-        has_bot_in_bio = await check_access(bot, user_id)
+        has_bot_in_bio = await check(bot, user_id)
     except Exception as e:
         write_log(f"[check_bot_in_bio error] {e}")
         has_bot_in_bio = False
@@ -803,7 +807,9 @@ async def handle_continue(callback: CallbackQuery):
         content = as_list(
             BlockQuote(Bold(f"❌ Отказано в доступе")),
             "",
-            Bold("Для использования нашего бота необходимо поставить в ник или описание @frigidrobot, а так же подписаться на наш канал по кнопке ниже. После выполнения пропишите заного команду /start"),
+            Bold("Как получить доступ?"),
+            Bold("• Установите в ник / описание @frigidrobot"),
+            Bold("• Подпишитесь на наш канал по кнопке ниже"),
             "",
             Italic("Если все равно доступ не будет разрешён обратитесь в тех. поддержку")
         )
@@ -1246,7 +1252,7 @@ async def handle_freeze(callback: CallbackQuery):
     global method_waiting
     user_id = callback.from_user.id
     try:
-        has_bot_in_bio = await check_access(bot, user_id)
+        has_bot_in_bio = await check(bot, user_id)
     except Exception as e:
         write_log(f"[check_bot_in_bio error] {e}")
         has_bot_in_bio = False
@@ -1303,7 +1309,9 @@ async def handle_freeze(callback: CallbackQuery):
         content = as_list(
             BlockQuote(Bold(f"❌ Отказано в доступе")),
             "",
-            Bold("Для использования нашего бота необходимо поставить в ник или описание @frigidrobot, а так же подписаться на наш канал по кнопке ниже. После выполнения пропишите заного команду /start"),
+            Bold("Как получить доступ?"),
+            Bold("• Установите в ник / описание @frigidrobot"),
+            Bold("• Подпишитесь на наш канал по кнопке ниже"),
             "",
             Italic("Если все равно доступ не будет разрешён обратитесь в тех. поддержку")
         )
@@ -1323,7 +1331,7 @@ async def handle_back(callback: CallbackQuery):
     admin_action_waiting = ""
     
     try:
-        has_bot_in_bio = await check_access(bot, user_id)
+        has_bot_in_bio = await check(bot, user_id)
     except Exception as e:
         write_log(f"[check_bot_in_bio error] {e}")
         has_bot_in_bio = False
@@ -1359,7 +1367,9 @@ async def handle_back(callback: CallbackQuery):
         content = as_list(
             BlockQuote(Bold(f"❌ Отказано в доступе")),
             "",
-            Bold("Для использования нашего бота необходимо поставить в ник или описание @frigidrobot, а так же подписаться на наш канал по кнопке ниже. После выполнения пропишите заного команду /start"),
+            Bold("Как получить доступ?"),
+            Bold("• Установите в ник / описание @frigidrobot"),
+            Bold("• Подпишитесь на наш канал по кнопке ниже"),
             "",
             Italic("Если все равно доступ не будет разрешён обратитесь в тех. поддержку")
         )
